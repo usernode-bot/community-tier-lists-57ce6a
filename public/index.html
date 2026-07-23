@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
   <script>
   // usernode-dev-console@1
   (function () {
@@ -63,60 +63,86 @@
     try { post('info', ['[dev-console ready]'], { kind: 'ready' }); } catch (_) {}
   })();
   </script>
+
   <title>Community Tier Lists</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%237c3aed'/><circle cx='50' cy='50' r='18' fill='white'/></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%237c3aed'/><text x='50' y='68' font-size='52' text-anchor='middle'>🏆</text></svg>">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>tailwind.config = { darkMode: 'class' }</script>
-</head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col items-center justify-center gap-8 p-4">
-  <h1 class="text-2xl font-bold">Community Tier Lists</h1>
-
-  <button id="press-btn" class="w-32 h-32 rounded-full bg-violet-600 hover:bg-violet-500 active:scale-95 transition-all text-white text-xl font-bold shadow-lg shadow-violet-600/30">
-    Press!
-  </button>
-
-  <div id="count" class="text-lg text-zinc-400">0 total presses</div>
-
-  <div class="w-full max-w-sm">
-    <h2 class="text-sm font-medium text-zinc-500 mb-2 text-center">Leaderboard</h2>
-    <div id="leaderboard" class="space-y-1"></div>
-  </div>
-
   <script>
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token') || '';
-    const headers = token ? { 'x-usernode-token': token } : {};
-
-    async function loadLeaderboard() {
-      const res = await fetch('/api/leaderboard', { headers });
-      if (!res.ok) return;
-      const { leaderboard } = await res.json();
-      const el = document.getElementById('leaderboard');
-      if (!leaderboard.length) {
-        el.innerHTML = '<p class="text-center text-zinc-600 text-sm">No presses yet</p>';
-        return;
-      }
-      el.innerHTML = leaderboard.map((r, i) =>
-        '<div class="flex justify-between px-3 py-1 rounded ' + (i === 0 ? 'bg-violet-600/20 text-violet-300' : 'text-zinc-400') + '">' +
-        '<span>' + (i + 1) + '. ' + r.username + '</span>' +
-        '<span class="font-mono">' + r.presses + '</span></div>'
-      ).join('');
-      const total = leaderboard.reduce((s, r) => s + parseInt(r.presses), 0);
-      document.getElementById('count').textContent = total + ' total presses';
-    }
-
-    document.getElementById('press-btn').addEventListener('click', async () => {
-      try {
-        const res = await fetch('/api/press', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...headers },
-        });
-        if (res.ok) loadLeaderboard();
-        else if (res.status === 401) document.getElementById('count').textContent = 'Sign in to press!';
-      } catch {}
-    });
-
-    loadLeaderboard();
+    tailwind.config = {
+      darkMode: 'class',
+      future: { hoverOnlyWhenSupported: true },
+      theme: { extend: { fontFamily: { display: ['Fraunces', 'Georgia', 'serif'], sans: ['Inter', 'system-ui', 'sans-serif'] } } },
+    };
   </script>
+
+  <link rel="stylesheet" href="https://social-vibecoding.usernodelabs.org/usernode-native/v1/native.css">
+  <script src="https://social-vibecoding.usernodelabs.org/usernode-native/v1/native.js"></script>
+  <script src="https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js"></script>
+
+  <style>
+    :root {
+      --paper: #FAF6EE; --paper-deep: #F3EDDF; --ink: #1F2B47; --ink-soft: #5A6378;
+      --line: #E7DFCC; --accent: #7c3aed;
+      --un-accent: #7c3aed;
+      --un-group-bg: #ffffff;
+      --un-hairline: #E7DFCC;
+    }
+    body { background: var(--paper); color: var(--ink); font-family: Inter, system-ui, sans-serif; }
+    .font-display { font-family: Fraunces, Georgia, serif; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 16px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #fff; border: 1px solid var(--line); border-radius: 9px;
+      padding: 6px 10px; font-size: 13px; font-weight: 600; color: var(--ink);
+      min-height: 34px; touch-action: none; user-select: none; -webkit-user-select: none;
+      cursor: grab; max-width: 100%;
+    }
+    .chip img { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; }
+    .chip.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .chip.dragging { opacity: 0.35; }
+    .chip-ghost {
+      position: fixed; z-index: 90; pointer-events: none;
+      transform: translate(-50%, -60%) scale(1.06) rotate(-2deg);
+      box-shadow: 0 8px 24px rgba(31,43,71,.28); cursor: grabbing;
+    }
+    .tier-row { display: flex; gap: 6px; align-items: stretch; }
+    .tier-label {
+      width: 44px; min-height: 52px; border-radius: 10px; display: grid; place-items: center;
+      color: #fff; font-family: Fraunces, serif; font-weight: 900; font-size: 17px; flex: none;
+      text-align: center; padding: 2px; word-break: break-word; line-height: 1.05;
+    }
+    .tier-items {
+      flex: 1; background: var(--paper-deep); border: 1.5px dashed #cfc6ab; border-radius: 10px;
+      padding: 6px; display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; min-height: 52px;
+    }
+    .tier-items.drop-target { border-color: var(--accent); background: #7c3aed14; }
+    .dist-bar { height: 10px; border-radius: 5px; min-width: 2px; }
+    .sheet-backdrop { position: fixed; inset: 0; background: rgba(31,43,71,.45); z-index: 60; }
+    .sheet-panel {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; background: #fff;
+      border-radius: 18px 18px 0 0; max-height: 82vh; overflow-y: auto;
+      padding: 14px 16px calc(18px + env(safe-area-inset-bottom));
+      box-shadow: 0 -10px 40px rgba(31,43,71,.25);
+    }
+    .btn-primary {
+      background: var(--ink); color: var(--paper); font-weight: 800; border-radius: 12px;
+      padding: 13px 18px; letter-spacing: .02em; width: 100%; text-align: center;
+    }
+    .btn-primary:disabled { opacity: .4; }
+    .badge { font-size: 10px; font-weight: 800; letter-spacing: .06em; border-radius: 99px; padding: 1px 7px; }
+    input, textarea, select {
+      background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
+      font-size: 15px; color: var(--ink); width: 100%;
+    }
+    input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+  </style>
+</head>
+<body>
+  <div id="app"><div class="p-8 text-center" style="color:var(--ink-soft)">Loading…</div></div>
+  <script src="/app.js"></script>
 </body>
 </html>
