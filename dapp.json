@@ -1,3 +1,22 @@
 {
-  "secrets": []
+  "name": "Community Tier Lists",
+  "icon": { "emoji": "🏆" },
+  "llm": {
+    "purpose": "Suggests and dedupes tier-list items from your title",
+    "suggested_daily_cap_cents": 50
+  },
+  "secrets": [
+    {
+      "key": "MODERATOR_USERNAMES",
+      "description": "Comma-separated Usernode usernames allowed to open the moderation queue (/mod), resolve reports, and post changelog entries",
+      "required": false,
+      "default": ""
+    }
+  ],
+  "tests": [
+    { "name": "Home renders", "path": "/", "expectText": "Today's List" },
+    { "name": "Rank screen renders", "path": "/t/900001", "expectSelector": "[data-tier-row]" },
+    { "name": "Results peek renders", "path": "/t/900001/results", "expectText": "rankings" },
+    { "name": "Create screen renders", "path": "/new", "expectText": "Tier scale" }
+  ]
 }
