@@ -16,6 +16,7 @@
   "tests": [
     { "name": "Home renders", "path": "/", "expectText": "Today's List" },
     { "name": "Rank screen renders", "path": "/t/900001", "expectSelector": "[data-tier-row]" },
+    { "name": "Partial-submit hint renders", "path": "/t/900001", "expectText": "Rank at least one item to submit" },
     { "name": "Results peek renders", "path": "/t/900001/results", "expectText": "rankings" },
     { "name": "Inline comments render on results", "path": "/t/900001/results", "expectText": "Staging demo comment" },
     { "name": "Comment composer renders styled", "path": "/t/900001/results", "expectText": "ADD A COMMENT" },

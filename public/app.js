@@ -322,7 +322,7 @@
     const trayItems = items.filter((it) => !(it.id in placements));
     const skipped = items.filter((it) => placements[it.id] === null);
     const placedCount = items.length - trayItems.length - skipped.length;
-    const done = trayItems.length === 0;
+    const canSubmit = placedCount >= 1;
     const submitted = data.my.status === 'submitted';
 
     const placer = sel && byId[sel] ? `<div class="card p-3 mt-2" id="placer">
@@ -348,7 +348,7 @@
       <div id="board">${rows}</div>
       ${placer}
       <div class="card p-3 mt-3">
-        <div class="text-[12px] font-bold mb-2" style="color:var(--ink-soft)">ITEM TRAY — drag into a tier, or tap to place · skip = “haven't seen it”</div>
+        <div class="text-[12px] font-bold mb-2" style="color:var(--ink-soft)">ITEM TRAY — drag into a tier, or tap to place · unplaced items are skipped when you submit</div>
         <div class="tier-items" data-tray="1" style="border-style:dashed;min-height:56px">${trayItems.map((it) => chipHtml(it)).join('') || '<span class="text-[12.5px] py-1.5" style="color:var(--ink-soft)">All items placed or skipped 🎉</span>'}</div>
       </div>
       ${skipped.length ? `<div class="card p-3 mt-2">
@@ -366,7 +366,9 @@
           <button data-decide="${p.id}:0" class="font-bold text-[12px]" style="color:#b0361f">reject</button>
         </div>`).join('')}
       </div>` : ''}
-      <button id="submit-btn" class="btn-primary mt-4" ${done ? '' : 'disabled'}>${submitted ? 'SAVE CHANGES' : 'SUBMIT RANKING'}</button>
+      <button id="submit-btn" class="btn-primary mt-4" ${canSubmit ? '' : 'disabled'}>${submitted ? 'SAVE CHANGES' : 'SUBMIT RANKING'}</button>
+      ${canSubmit && trayItems.length ? `<div class="text-[12px] mt-1.5 text-center" style="color:var(--ink-soft)">${trayItems.length} item${trayItems.length === 1 ? '' : 's'} still in the tray — they'll be marked as skipped when you submit.</div>` : ''}
+      ${!canSubmit ? `<div class="text-[12px] mt-1.5 text-center" style="color:var(--ink-soft)">Rank at least one item to submit.</div>` : ''}
       <div class="text-center mt-3">
         <button data-nav="/t/${t.id}/results" class="text-[13.5px] font-semibold" style="color:var(--ink-soft)">just show me the results → <span class="text-[11px]">(peek — ranking stays open)</span></button>
       </div>
@@ -397,6 +399,10 @@
     if (submit) submit.addEventListener('click', async () => {
       submit.disabled = true;
       try {
+        // Mirror the server's auto-skip: unplaced active items become explicit skips.
+        for (const it of data.items) {
+          if (it.status === 'active' && !(it.id in rankState.placements)) rankState.placements[it.id] = null;
+        }
         await saveRanking(true);
         // Replace the editor in history so back from results lands on home,
         // not on the ranking screen the user just finished.
