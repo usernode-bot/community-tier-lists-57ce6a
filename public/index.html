@@ -94,6 +94,15 @@
     body { background: var(--paper); color: var(--ink); font-family: Inter, system-ui, sans-serif; }
     .font-display { font-family: Fraunces, Georgia, serif; }
     .card { background: #fff; border: 1px solid var(--line); border-radius: 16px; }
+    .card-tap { transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease; }
+    @media (hover: hover) {
+      .card-tap:hover:not(:active) {
+        border-color: #d9c8f5;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(31,43,71,.08);
+      }
+    }
+    .chev { color: var(--ink-soft); font-size: 18px; line-height: 1; font-weight: 600; opacity: .55; flex: none; }
     .chip {
       display: inline-flex; align-items: center; gap: 4px;
       background: #fff; border: 1px solid var(--line); border-radius: 9px;
@@ -134,7 +143,7 @@
       padding: 13px 18px; letter-spacing: .02em; width: 100%; text-align: center;
     }
     .btn-primary:disabled { opacity: .4; }
-    .badge { font-size: 10px; font-weight: 800; letter-spacing: .06em; border-radius: 99px; padding: 1px 7px; }
+    .badge { font-size: 10px; font-weight: 800; letter-spacing: .06em; border-radius: 99px; padding: 1px 7px; white-space: nowrap; flex: none; }
     input, textarea, select {
       background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
       font-size: 15px; color: var(--ink); width: 100%;

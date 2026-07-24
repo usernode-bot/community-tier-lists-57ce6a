@@ -15,6 +15,7 @@
   ],
   "tests": [
     { "name": "Home renders", "path": "/", "expectText": "Today's List" },
+    { "name": "Feed shows rank CTA", "path": "/", "expectText": "Rank now" },
     { "name": "Rank screen renders", "path": "/t/900001", "expectSelector": "[data-tier-row]" },
     { "name": "Partial-submit hint renders", "path": "/t/900001", "expectText": "Rank at least one item to submit" },
     { "name": "Results peek renders", "path": "/t/900001/results", "expectText": "rankings" },
