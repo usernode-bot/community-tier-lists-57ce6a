@@ -195,6 +195,17 @@
   const tierLetterChip = (labels, tier) => tier == null ? '<span class="badge" style="background:#eee;color:#888">skip</span>'
     : `<span class="badge" style="background:${tierColor(tier - 1)};color:#fff">${esc(labels[tier - 1] || tier)}</span>`;
 
+  const CHEV = '<span class="chev" aria-hidden="true">›</span>';
+
+  const statusPill = (myStatus) => myStatus === 'submitted'
+    ? '<span class="badge" style="background:var(--ink);color:var(--paper)">Results</span>'
+    : myStatus === 'draft'
+      ? '<span class="badge" style="background:#E5A83B33;color:#8a6415">Resume</span>'
+      : '<span class="badge" style="background:#7c3aed22;color:#6a50bd">Rank now</span>';
+
+  // Submitted → community results; draft / not started → the ranking board.
+  const templateDest = (id, myStatus) => myStatus === 'submitted' ? `/t/${id}/results` : `/t/${id}`;
+
   // ---------- Home ----------
 
   async function renderHome() {
@@ -225,8 +236,8 @@
 
     const inprog = h.in_progress.length ? `<section class="mb-4">
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">In progress</div>
-      ${h.in_progress.map((r) => `<button data-nav="/t/${r.template_id}" class="card w-full text-left px-3 py-2 mb-1 text-sm un-pressable">
-        <b>${esc(r.title)}</b> — ${r.placed} of ${r.total} placed · <span style="color:var(--accent)">resume</span></button>`).join('')}
+      ${h.in_progress.map((r) => `<button data-nav="/t/${r.template_id}" class="card card-tap w-full text-left px-3 py-2 mb-1 text-sm un-pressable flex items-center gap-2">
+        <span class="flex-1 min-w-0"><b>${esc(r.title)}</b> — ${r.placed} of ${r.total} placed · <span style="color:var(--accent)">resume</span></span>${CHEV}</button>`).join('')}
     </section>` : '';
 
     const groups = `<section class="mb-4">
@@ -234,19 +245,21 @@
         <div class="text-[11px] font-bold uppercase tracking-widest" style="color:var(--ink-soft)">My groups</div>
         <button id="new-group" class="ml-auto text-[12px] font-bold" style="color:var(--accent)">+ new group</button>
       </div>
-      ${h.groups.length ? h.groups.map((g) => `<button data-nav="/g/${g.id}" class="card w-full text-left px-3 py-2 mb-1 text-sm un-pressable">
-        <b>${esc(g.name)}</b> · ${g.member_count} member${g.member_count === 1 ? '' : 's'}${g.recent ? ` · <span style="color:var(--accent)">${g.recent} new ranking${g.recent === 1 ? '' : 's'}</span>` : ''}</button>`).join('')
+      ${h.groups.length ? h.groups.map((g) => `<button data-nav="/g/${g.id}" class="card card-tap w-full text-left px-3 py-2 mb-1 text-sm un-pressable flex items-center gap-2">
+        <span class="flex-1 min-w-0"><b>${esc(g.name)}</b> · ${g.member_count} member${g.member_count === 1 ? '' : 's'}${g.recent ? ` · <span style="color:var(--accent)">${g.recent} new ranking${g.recent === 1 ? '' : 's'}</span>` : ''}</span>${CHEV}</button>`).join('')
       : '<div class="card px-3 py-3 text-sm" style="color:var(--ink-soft)">Run private lists with friends — restaurants, crags, whatever you argue about.</div>'}
     </section>`;
 
     const feed = `<section class="mb-4">
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Feed · trending &amp; recent</div>
-      ${h.feed.map((t) => `<button data-nav="/t/${t.id}" class="card w-full text-left px-3 py-2 mb-1 un-pressable">
-        <div class="text-sm font-bold">${t.recent_n >= 3 ? '🔥 ' : ''}${esc(t.title)}</div>
-        <div class="text-[12px]" style="color:var(--ink-soft)">${t.n} ranking${t.n === 1 ? '' : 's'}${t.category ? ' · ' + esc(t.category) : ''} · by ${esc(t.author_username)}</div>
+      ${h.feed.map((t) => `<button data-nav="${templateDest(t.id, t.my_status)}" class="card card-tap w-full text-left px-3 py-2 mb-1 un-pressable flex items-center gap-2">
+        <span class="flex-1 min-w-0 block">
+          <span class="block text-sm font-bold truncate">${t.recent_n >= 3 ? '🔥 ' : ''}${esc(t.title)}</span>
+          <span class="block text-[12px] truncate" style="color:var(--ink-soft)">${t.n} ranking${t.n === 1 ? '' : 's'}${t.category ? ' · ' + esc(t.category) : ''} · by ${esc(t.author_username)}</span>
+        </span>${statusPill(t.my_status)}${CHEV}
       </button>`).join('') || '<div class="card px-3 py-3 text-sm" style="color:var(--ink-soft)">Nothing here yet — create the first list!</div>'}
-      ${h.recent_rankings.map((r) => `<button data-nav="/t/${r.template_id}" class="w-full text-left px-3 py-1.5 text-[12.5px] un-pressable" style="color:var(--ink-soft)">
-        <b>${esc(r.username)}</b> ranked “${esc(r.title)}”</button>`).join('')}
+      ${h.recent_rankings.map((r) => `<button data-nav="${templateDest(r.template_id, r.my_status)}" class="w-full text-left px-3 py-1.5 text-[12.5px] un-pressable flex items-center gap-2" style="color:var(--ink-soft)">
+        <span class="flex-1 min-w-0 truncate"><b>${esc(r.username)}</b> ranked “${esc(r.title)}”</span>${CHEV}</button>`).join('')}
     </section>`;
 
     screen(`${header(`Tier Lists ${stagingPill}`, {
@@ -1077,9 +1090,11 @@
     <main class="max-w-xl mx-auto p-4 pb-10 un-safe-bottom">
       <div class="text-[13px] mb-3" style="color:var(--ink-soft)">${d.members.length} member${d.members.length === 1 ? '' : 's'}: ${d.members.map(esc).join(', ')}</div>
       ${d.templates.map((t) => `<div class="card p-3 mb-2">
-        <button data-nav="/t/${t.id}" class="w-full text-left un-pressable">
-          <div class="font-bold text-[15px]">${esc(t.title)}</div>
-          <div class="text-[12.5px]" style="color:var(--ink-soft)">${t.n} of ${d.members.length} ranked${t.mine_in ? ' · your ranking is in ✓' : ' · <b style="color:#6a50bd">rank it</b>'}</div>
+        <button data-nav="${templateDest(t.id, t.mine_in ? 'submitted' : null)}" class="w-full text-left un-pressable flex items-center gap-2">
+          <span class="flex-1 min-w-0 block">
+            <span class="block font-bold text-[15px]">${esc(t.title)}</span>
+            <span class="block text-[12.5px]" style="color:var(--ink-soft)">${t.n} of ${d.members.length} ranked${t.mine_in ? ' · your ranking is in ✓' : ' · <b style="color:#6a50bd">rank it</b>'}</span>
+          </span>${CHEV}
         </button>
         ${t.biggest_split ? `<div class="text-[12.5px] mt-1 pt-1" style="border-top:1px solid var(--paper-deep);color:var(--ink-soft)">
           biggest split: <b style="color:var(--ink)">${esc(t.biggest_split.item)}</b>
@@ -1136,13 +1151,13 @@
         (community: ${tierLetterChip(m.hottest.tier_labels, m.hottest.community)}) on “${esc(m.hottest.template_title)}”
       </div>` : ''}
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">My templates</div>
-      ${m.my_templates.map((t) => `<button data-nav="/t/${t.id}/results" class="card w-full text-left px-3 py-2 mb-1 text-sm un-pressable">
-        <b>${esc(t.title)}</b> — ${t.n} ranking${t.n === 1 ? '' : 's'}${t.visibility === 'group' ? ' · group' : ''}${t.hidden ? ' · <b style="color:#b0361f">hidden</b>' : ''}
+      ${m.my_templates.map((t) => `<button data-nav="/t/${t.id}/results" class="card card-tap w-full text-left px-3 py-2 mb-1 text-sm un-pressable flex items-center gap-2">
+        <span class="flex-1 min-w-0"><b>${esc(t.title)}</b> — ${t.n} ranking${t.n === 1 ? '' : 's'}${t.visibility === 'group' ? ' · group' : ''}${t.hidden ? ' · <b style="color:#b0361f">hidden</b>' : ''}</span>${CHEV}
       </button>`).join('') || '<div class="card px-3 py-3 text-sm mb-1" style="color:var(--ink-soft)">None yet — make one, it takes a minute.</div>'}
       <button data-nav="/new" class="btn-primary mt-2 mb-4">CREATE A TEMPLATE</button>
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">This week Tier Lists changed because you voted</div>
       ${m.shipped.map((c) => `<div class="card px-3 py-2 mb-1 text-[13px]"><b>${esc(c.title)}</b>${c.body ? `<div style="color:var(--ink-soft)">${esc(c.body)}</div>` : ''}</div>`).join('') || '<div class="text-[13px]" style="color:var(--ink-soft)">Nothing shipped yet.</div>'}
-      ${m.is_moderator ? '<button data-nav="/mod" class="card w-full px-3 py-3 mt-3 text-[13px] font-bold un-pressable">🛡️ Moderation queue</button>' : ''}
+      ${m.is_moderator ? `<button data-nav="/mod" class="card card-tap w-full text-left px-3 py-3 mt-3 text-[13px] font-bold un-pressable flex items-center gap-2"><span class="flex-1 min-w-0">🛡️ Moderation queue</span>${CHEV}</button>` : ''}
     </main>`);
   }
 

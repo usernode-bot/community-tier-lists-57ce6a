@@ -180,15 +180,17 @@ app.get('/api/home', wrap(async (req, res) => {
     `SELECT t.id::text, t.title, t.category, t.author_username, t.created_at, t.is_seed,
             (SELECT COUNT(*)::int FROM rankings r WHERE r.template_id = t.id AND r.status = 'submitted') AS n,
             (SELECT COUNT(*)::int FROM rankings r WHERE r.template_id = t.id AND r.status = 'submitted'
-              AND r.submitted_at > now() - interval '48 hours') AS recent_n
+              AND r.submitted_at > now() - interval '48 hours') AS recent_n,
+            (SELECT rm.status FROM rankings rm WHERE rm.template_id = t.id AND rm.user_id = $1) AS my_status
      FROM templates t
      WHERE t.visibility = 'public' AND NOT t.hidden
      ORDER BY recent_n DESC,
               GREATEST(COALESCE((SELECT MAX(r2.submitted_at) FROM rankings r2 WHERE r2.template_id = t.id), t.created_at), t.created_at) DESC
-     LIMIT 30`)).rows;
+     LIMIT 30`, [me.id])).rows;
 
   const recentRankings = (await pool.query(
-    `SELECT r.username, r.template_id::text AS template_id, t.title, r.submitted_at
+    `SELECT r.username, r.template_id::text AS template_id, t.title, r.submitted_at,
+            (SELECT rm.status FROM rankings rm WHERE rm.template_id = r.template_id AND rm.user_id = $1) AS my_status
      FROM rankings r JOIN templates t ON t.id = r.template_id
      WHERE r.status = 'submitted' AND t.visibility = 'public' AND NOT t.hidden AND r.user_id <> $1
      ORDER BY r.submitted_at DESC LIMIT 8`, [me.id])).rows;
