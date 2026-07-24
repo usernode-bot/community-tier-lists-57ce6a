@@ -46,7 +46,9 @@
     if (t) t.remove();
     t = document.createElement('div');
     t.id = 'ctl-toast';
-    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1F2B47;color:#FAF6EE;padding:9px 18px;border-radius:99px;font-size:13.5px;font-weight:600;z-index:99;max-width:88vw';
+    // Dark surface in BOTH themes (the iOS HUD idiom); --toast-bg lifts in dark
+    // so the capsule still separates from the page.
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--toast-bg);color:var(--toast-fg);padding:9px 18px;border-radius:99px;font-size:13.5px;font-weight:600;z-index:99;max-width:88vw';
     t.textContent = msg;
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 2400);
@@ -127,8 +129,8 @@
 
   function header(title, opts = {}) {
     const back = opts.back === false ? '' :
-      `<button data-nav="${esc(opts.back || '/')}" class="un-touch-target text-xl font-bold px-1" style="color:#3F97E8" aria-label="Back">←</button>`;
-    return `<header class="sticky top-0 z-20 un-safe-top" style="background:rgba(250,246,238,.94);backdrop-filter:blur(8px);border-bottom:2px solid var(--ink)">
+      `<button data-nav="${esc(opts.back || '/')}" class="un-touch-target text-xl font-bold px-1" style="color:var(--link)" aria-label="Back">←</button>`;
+    return `<header class="sticky top-0 z-20 un-safe-top" style="background:var(--header-bg);backdrop-filter:blur(8px);border-bottom:2px solid var(--header-rule)">
       <div class="max-w-xl mx-auto flex items-center gap-2 px-3 h-12">
         ${back}
         <div class="font-display font-black text-[17px] truncate">${title}</div>
@@ -192,7 +194,7 @@
     return homeCache;
   }
 
-  const tierLetterChip = (labels, tier) => tier == null ? '<span class="badge" style="background:#eee;color:#888">skip</span>'
+  const tierLetterChip = (labels, tier) => tier == null ? '<span class="badge" style="background:var(--tint-neutral-bg);color:var(--tint-neutral-fg)">skip</span>'
     : `<span class="badge" style="background:${tierColor(tier - 1)};color:#fff">${esc(labels[tier - 1] || tier)}</span>`;
 
   const CHEV = '<span class="chev" aria-hidden="true">›</span>';
@@ -200,8 +202,8 @@
   const statusPill = (myStatus) => myStatus === 'submitted'
     ? '<span class="badge" style="background:var(--ink);color:var(--paper)">Results</span>'
     : myStatus === 'draft'
-      ? '<span class="badge" style="background:#E5A83B33;color:#8a6415">Resume</span>'
-      : '<span class="badge" style="background:#7c3aed22;color:#6a50bd">Rank now</span>';
+      ? '<span class="badge" style="background:var(--tint-warn-bg);color:var(--tint-warn-fg)">Resume</span>'
+      : '<span class="badge" style="background:var(--tint-accent-bg);color:var(--tint-accent-fg)">Rank now</span>';
 
   // Submitted → community results; draft / not started → the ranking board.
   const templateDest = (id, myStatus) => myStatus === 'submitted' ? `/t/${id}/results` : `/t/${id}`;
@@ -212,7 +214,7 @@
     loading('Tier Lists');
     const h = await getHome(true);
     const stagingPill = h.env === 'staging'
-      ? '<span class="badge" style="background:#E5A83B33;color:#8a6415;border:1px solid #E5A83B66">staging</span>' : '';
+      ? '<span class="badge" style="background:var(--tint-warn-bg);color:var(--tint-warn-fg);border:1px solid var(--tint-warn-line)">staging</span>' : '';
     const modBtn = h.me.is_moderator
       ? '<button data-nav="/mod" class="un-touch-target text-lg" aria-label="Moderation">🛡️</button>' : '';
 
@@ -221,7 +223,7 @@
       const cta = h.today.my_status === 'submitted' ? 'See the results'
         : h.today.my_status === 'draft' ? 'Resume ranking' : 'Rank it';
       const dest = h.today.my_status === 'submitted' ? `/t/${h.today.template_id}/results` : `/t/${h.today.template_id}`;
-      hero = `<section class="card p-4 mb-4" style="background:linear-gradient(135deg,#fff, #f4eefe);border-color:#d9c8f5">
+      hero = `<section class="card p-4 mb-4" style="background:var(--hero-grad);border-color:var(--card-line-hover)">
         <div class="text-[11px] font-bold uppercase tracking-widest" style="color:var(--accent)">Today's List · No. ${h.today.edition_no}</div>
         <div class="font-display font-black text-2xl mt-1">${esc(h.today.title)}</div>
         <div class="text-sm mt-1" style="color:var(--ink-soft)">${h.today.n} ranked so far${h.today.my_status === 'submitted' ? ' · yours is in ✓' : ''}</div>
@@ -319,8 +321,8 @@
 
     const chipHtml = (it, extra = '') => `<button class="chip ${sel === it.id ? 'selected' : ''}" data-item="${it.id}" ${extra}>
       ${it.image_url ? `<img src="${esc(it.image_url)}" alt="">` : ''}${it.emoji ? esc(it.emoji) + ' ' : ''}${esc(it.name)}
-      ${it.is_new ? '<span class="badge" style="background:#7c3aed22;color:#6a50bd">NEW</span>' : ''}
-      ${it.status === 'proposed' ? '<span class="badge" style="background:#E5A83B33;color:#8a6415">only you</span>' : ''}
+      ${it.is_new ? '<span class="badge" style="background:var(--tint-accent-bg);color:var(--tint-accent-fg)">NEW</span>' : ''}
+      ${it.status === 'proposed' ? '<span class="badge" style="background:var(--tint-warn-bg);color:var(--tint-warn-fg)">only you</span>' : ''}
     </button>`;
 
     const rows = labels.map((label, i) => {
@@ -375,8 +377,8 @@
         <div class="text-[12px] font-bold mb-2">Proposed items (you're the author)</div>
         ${data.proposals.map((p) => `<div class="flex items-center gap-2 text-sm py-1">
           <span class="flex-1">${esc(p.name)} <span style="color:var(--ink-soft)">by ${esc(p.added_by_username || '?')}</span></span>
-          <button data-decide="${p.id}:1" class="font-bold text-[12px]" style="color:#4d7325">approve</button>
-          <button data-decide="${p.id}:0" class="font-bold text-[12px]" style="color:#b0361f">reject</button>
+          <button data-decide="${p.id}:1" class="font-bold text-[12px]" style="color:var(--ok-fg)">approve</button>
+          <button data-decide="${p.id}:0" class="font-bold text-[12px]" style="color:var(--danger-fg)">reject</button>
         </div>`).join('')}
       </div>` : ''}
       <button id="submit-btn" class="btn-primary mt-4" ${canSubmit ? '' : 'disabled'}>${submitted ? 'SAVE CHANGES' : 'SUBMIT RANKING'}</button>
@@ -597,7 +599,7 @@
           <b>Your hottest take</b> — ${esc(hotItem.name)} in ${tierLetterChip(labels, hot.mine)} (community: ${tierLetterChip(labels, hot.community)}) · top ${hot.percentile}% contrarian
         </div>` : agg.n > 1 ? '<div class="card p-3 mb-2 text-sm"><b>No hot takes</b> — you agree with the crowd on everything. Suspicious. 🤨</div>' : ''}`;
     } else {
-      revealHtml = `<div class="card p-3 mb-2 text-sm" style="background:#7c3aed10;border-color:#d9c8f5">
+      revealHtml = `<div class="card p-3 mb-2 text-sm" style="background:var(--peek-bg);border-color:var(--card-line-hover)">
         <b>You're peeking.</b> The community grid is below — your own reveal (alignment %, hottest take) unlocks when you rank.
         <button data-nav="/t/${id}" class="btn-primary mt-2">Rank it yourself</button>
       </div>`;
@@ -617,9 +619,9 @@
         <div class="tier-label" style="background:${tierColor(i)}">${esc(label)}</div>
         <div class="tier-items" style="cursor:default">${inTier.map((it) => `
           <button class="chip" data-dist="${it.id}" style="touch-action:auto">${it.emoji ? esc(it.emoji) + ' ' : ''}${esc(it.name)}
-            ${agg.most_contested === it.id ? '<span class="badge" style="background:#FF6B5722;color:#b0361f">🔥</span>' : ''}
-            ${it.is_new ? '<span class="badge" style="background:#7c3aed22;color:#6a50bd">NEW</span>' : ''}
-            ${agg.comment_counts[it.id] ? `<span class="badge" style="background:#eee;color:#666">💬${agg.comment_counts[it.id]}</span>` : ''}
+            ${agg.most_contested === it.id ? '<span class="badge" style="background:var(--tint-danger-bg);color:var(--tint-danger-fg)">🔥</span>' : ''}
+            ${it.is_new ? '<span class="badge" style="background:var(--tint-accent-bg);color:var(--tint-accent-fg)">NEW</span>' : ''}
+            ${agg.comment_counts[it.id] ? `<span class="badge" style="background:var(--tint-neutral-bg);color:var(--tint-neutral-fg)">💬${agg.comment_counts[it.id]}</span>` : ''}
           </button>`).join('')}</div>
       </div>`;
     }).join('');
@@ -715,7 +717,7 @@
       <div class="text-[12.5px] mb-3" style="color:var(--ink-soft)">
         ${a && a.median ? `community tier: ${esc(labels[a.median - 1])}` : 'not enough data yet'} ·
         ${total} placement${total === 1 ? '' : 's'} · ${a ? a.skip_pct : 0}% skipped
-        ${item.is_new ? ' · <b style="color:#6a50bd">NEW — low data</b>' : ''}
+        ${item.is_new ? ' · <b style="color:var(--tint-accent-fg)">NEW — low data</b>' : ''}
       </div>
       ${bars}
       <button id="dist-comment" class="mt-3 text-[13px] font-bold" style="color:var(--accent)">💬 comment on ${esc(item.name)}</button>
@@ -1021,7 +1023,7 @@
     if (!el) return;
     el.innerHTML = newState.items.map((it, i) => `
       <span class="chip" style="cursor:default;touch-action:auto">${it.emoji ? esc(it.emoji) + ' ' : ''}${esc(it.name)}
-        <button data-rm="${i}" class="ml-1 font-black" style="color:#b0361f">×</button></span>`).join('')
+        <button data-rm="${i}" class="ml-1 font-black" style="color:var(--danger-fg)">×</button></span>`).join('')
       || '<span class="text-[13px]" style="color:var(--ink-soft)">No items yet — use AI or add manually.</span>';
     document.getElementById('n-count').textContent = newState.items.length;
     el.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', () => {
@@ -1093,7 +1095,7 @@
         <button data-nav="${templateDest(t.id, t.mine_in ? 'submitted' : null)}" class="w-full text-left un-pressable flex items-center gap-2">
           <span class="flex-1 min-w-0 block">
             <span class="block font-bold text-[15px]">${esc(t.title)}</span>
-            <span class="block text-[12.5px]" style="color:var(--ink-soft)">${t.n} of ${d.members.length} ranked${t.mine_in ? ' · your ranking is in ✓' : ' · <b style="color:#6a50bd">rank it</b>'}</span>
+            <span class="block text-[12.5px]" style="color:var(--ink-soft)">${t.n} of ${d.members.length} ranked${t.mine_in ? ' · your ranking is in ✓' : ' · <b style="color:var(--tint-accent-fg)">rank it</b>'}</span>
           </span>${CHEV}
         </button>
         ${t.biggest_split ? `<div class="text-[12.5px] mt-1 pt-1" style="border-top:1px solid var(--paper-deep);color:var(--ink-soft)">
@@ -1135,6 +1137,56 @@
 
   // ---------- Profile ----------
 
+  // ---------- Appearance (theme) control ----------
+  // The runtime lives inline in index.html (it has to run before first paint);
+  // this is only the Profile UI for it. The `dark` class sits on <html>, so it
+  // survives every screen() re-render — nothing else here needs theme code.
+
+  const THEME_MODES = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']];
+
+  function themeHint() {
+    const t = window.ctlTheme;
+    if (!t) return '';
+    const mode = t.get();
+    if (mode === 'light') return 'Always light.';
+    if (mode === 'dark') return 'Always dark.';
+    return `Following your device — ${t.resolved()} right now.`;
+  }
+
+  function themeSectionHtml() {
+    const mode = window.ctlTheme ? window.ctlTheme.get() : 'system';
+    return `<div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Appearance</div>
+      <div class="card p-3 mb-4">
+        <div class="seg" role="radiogroup" aria-label="Appearance">
+          ${THEME_MODES.map(([v, label]) => `<button class="seg-btn un-pressable" data-theme-mode="${v}" role="radio" aria-checked="${mode === v ? 'true' : 'false'}">${label}</button>`).join('')}
+        </div>
+        <div id="theme-hint" class="text-[12px] mt-2" style="color:var(--ink-soft)">${esc(themeHint())}</div>
+      </div>`;
+  }
+
+  // Repaint in place (no /api/me round-trip); a no-op when Profile isn't mounted.
+  function paintThemeSeg() {
+    const t = window.ctlTheme;
+    if (!t) return;
+    const mode = t.get();
+    document.querySelectorAll('[data-theme-mode]').forEach((b) =>
+      b.setAttribute('aria-checked', b.getAttribute('data-theme-mode') === mode ? 'true' : 'false'));
+    const hint = document.getElementById('theme-hint');
+    if (hint) hint.textContent = themeHint();
+  }
+
+  function bindThemeSeg() {
+    const t = window.ctlTheme;
+    if (!t) return;
+    document.querySelectorAll('[data-theme-mode]').forEach((b) => b.addEventListener('click', () => {
+      const mode = b.getAttribute('data-theme-mode');
+      t.set(mode);
+      paintThemeSeg();
+      const label = (THEME_MODES.find((m) => m[0] === mode) || [, mode])[1];
+      toast('Appearance: ' + label);
+    }));
+  }
+
   async function renderMe() {
     loading('Profile');
     const m = await api('/api/me');
@@ -1150,15 +1202,17 @@
         <b>Your hottest take</b> — ${esc(m.hottest.item_name)} in ${tierLetterChip(m.hottest.tier_labels, m.hottest.mine)}
         (community: ${tierLetterChip(m.hottest.tier_labels, m.hottest.community)}) on “${esc(m.hottest.template_title)}”
       </div>` : ''}
+      ${themeSectionHtml()}
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">My templates</div>
       ${m.my_templates.map((t) => `<button data-nav="/t/${t.id}/results" class="card card-tap w-full text-left px-3 py-2 mb-1 text-sm un-pressable flex items-center gap-2">
-        <span class="flex-1 min-w-0"><b>${esc(t.title)}</b> — ${t.n} ranking${t.n === 1 ? '' : 's'}${t.visibility === 'group' ? ' · group' : ''}${t.hidden ? ' · <b style="color:#b0361f">hidden</b>' : ''}</span>${CHEV}
+        <span class="flex-1 min-w-0"><b>${esc(t.title)}</b> — ${t.n} ranking${t.n === 1 ? '' : 's'}${t.visibility === 'group' ? ' · group' : ''}${t.hidden ? ' · <b style="color:var(--danger-fg)">hidden</b>' : ''}</span>${CHEV}
       </button>`).join('') || '<div class="card px-3 py-3 text-sm mb-1" style="color:var(--ink-soft)">None yet — make one, it takes a minute.</div>'}
       <button data-nav="/new" class="btn-primary mt-2 mb-4">CREATE A TEMPLATE</button>
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">This week Tier Lists changed because you voted</div>
       ${m.shipped.map((c) => `<div class="card px-3 py-2 mb-1 text-[13px]"><b>${esc(c.title)}</b>${c.body ? `<div style="color:var(--ink-soft)">${esc(c.body)}</div>` : ''}</div>`).join('') || '<div class="text-[13px]" style="color:var(--ink-soft)">Nothing shipped yet.</div>'}
       ${m.is_moderator ? `<button data-nav="/mod" class="card card-tap w-full text-left px-3 py-3 mt-3 text-[13px] font-bold un-pressable flex items-center gap-2"><span class="flex-1 min-w-0">🛡️ Moderation queue</span>${CHEV}</button>` : ''}
     </main>`);
+    bindThemeSeg();
   }
 
   // ---------- Moderation ----------
@@ -1183,20 +1237,20 @@
       <div class="text-[12.5px] mb-3" style="color:var(--ink-soft)">${d.stats.reports_24h} reports in 24h · ${d.stats.total_rankings} total rankings · auto-hide at 3 distinct reporters</div>
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Report queue (${d.queue.length})</div>
       ${d.queue.map((q) => `<div class="card p-3 mb-2 text-sm">
-        <div><span class="badge" style="background:#eee">${q.content_type}</span> ${q.hidden ? '<span class="badge" style="background:#FF6B5722;color:#b0361f">hidden</span>' : ''}
+        <div><span class="badge" style="background:var(--tint-neutral-bg);color:var(--tint-neutral-fg)">${q.content_type}</span> ${q.hidden ? '<span class="badge" style="background:var(--tint-danger-bg);color:var(--tint-danger-fg)">hidden</span>' : ''}
           <b>${esc(q.preview || '(deleted)')}</b></div>
         <div class="text-[12px] mt-1" style="color:var(--ink-soft)">${q.report_count} report${q.report_count === 1 ? '' : 's'} · ${q.reporters.map(esc).join(', ')}${q.reasons.length ? ' · “' + esc(q.reasons[0]) + '”' : ''}</div>
         <div class="flex gap-2 mt-2">
           ${q.template_id ? `<button data-nav="/t/${q.template_id}/results" class="text-[12px] font-bold" style="color:var(--accent)">view</button>` : ''}
-          <button data-mod="${q.content_type}:${q.content_id}:restore" class="text-[12px] font-bold" style="color:#4d7325">restore</button>
-          <button data-mod="${q.content_type}:${q.content_id}:remove" class="text-[12px] font-bold" style="color:#b0361f">keep hidden</button>
+          <button data-mod="${q.content_type}:${q.content_id}:restore" class="text-[12px] font-bold" style="color:var(--ok-fg)">restore</button>
+          <button data-mod="${q.content_type}:${q.content_id}:remove" class="text-[12px] font-bold" style="color:var(--danger-fg)">keep hidden</button>
           <button data-mod="${q.content_type}:${q.content_id}:dismiss" class="text-[12px] font-bold" style="color:var(--ink-soft)">dismiss</button>
         </div>
       </div>`).join('') || '<div class="card p-3 text-sm mb-2" style="color:var(--ink-soft)">Queue is empty. 🎉</div>'}
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1 mt-4" style="color:var(--ink-soft)">Integrity flags (${d.flags.length})</div>
       ${d.flags.map((f) => `<div class="card p-3 mb-2 text-sm">
         <b>${esc(f.kind)}</b> on “${esc(f.title || f.template_id || '?')}” · ${esc(JSON.stringify(f.detail || {}))}
-        <button data-flag="${f.id}" class="ml-2 text-[12px] font-bold" style="color:#4d7325">resolve</button>
+        <button data-flag="${f.id}" class="ml-2 text-[12px] font-bold" style="color:var(--ok-fg)">resolve</button>
       </div>`).join('') || '<div class="card p-3 text-sm" style="color:var(--ink-soft)">No open flags.</div>'}
       <div class="card p-3 mt-4">
         <div class="text-[12px] font-bold mb-2" style="color:var(--ink-soft)">POST A WHAT'S-CHANGING / CHANGELOG ENTRY</div>
@@ -1227,6 +1281,9 @@
   }
 
   // ---------- Share cards (client-side canvas, 1200×630) ----------
+  // Deliberately theme-INDEPENDENT: these are images posted outside the app,
+  // so they always render on cream paper regardless of the sender's theme.
+  // Don't "helpfully" swap these literals for theme tokens.
 
   function cardBase() {
     const c = document.createElement('canvas');
@@ -1342,6 +1399,10 @@
   }
 
   // ---------- boot ----------
+
+  // One subscription for the app's lifetime: keeps the Profile control's
+  // "(dark right now)" hint honest when the OS flips mid-session.
+  if (window.ctlTheme) window.ctlTheme.onChange(paintThemeSeg);
 
   route();
 })();
