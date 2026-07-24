@@ -389,10 +389,9 @@ app.put('/api/templates/:id/ranking', wrap(async (req, res) => {
   }
 
   if (submit) {
-    const activeIds = items.filter((i) => i.status === 'active').map((i) => i.id);
-    const missing = activeIds.filter((id) => !placements.has(id));
-    if (missing.length) {
-      throw httpErr(400, `Place or skip every item first (${missing.length} left)`, 'incomplete');
+    const rankedCount = [...placements.values()].filter((tier) => tier != null).length;
+    if (rankedCount === 0) {
+      throw httpErr(400, 'Rank at least one item first', 'no_placements');
     }
   }
 
@@ -404,6 +403,15 @@ app.put('/api/templates/:id/ranking', wrap(async (req, res) => {
      RETURNING id, status, submitted_at`,
     [t.id, req.user.id, req.user.username]);
   const ranking = up.rows[0];
+
+  // Any save that ends submitted records unplaced active items as explicit
+  // skips (tier NULL) — keeps one row per active item so skip-% denominators
+  // stay honest. Draft saves stay sparse so the tray remains meaningful.
+  if (submit || ranking.status === 'submitted') {
+    for (const it of items) {
+      if (it.status === 'active' && !placements.has(it.id)) placements.set(it.id, null);
+    }
+  }
 
   await pool.query('DELETE FROM ranking_items WHERE ranking_id = $1', [ranking.id]);
   if (placements.size) {

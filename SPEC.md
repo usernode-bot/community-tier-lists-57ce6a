@@ -240,11 +240,13 @@ without the `tier IS NOT NULL` filter.
   aggregate response and are always rendered — a spiked distribution is
   self-exposing (integrity §6.8).
 - **% skipped per item** = skips / (placements + skips). Denominator is only
-  users who actually saw the item: submit requires every tray item to be
-  either placed or explicitly skipped, so items added to the shared set
-  *after* a user ranked are simply absent from that user's rows (neither
-  placed nor skipped) until a re-rank. "NEW" badge + low-n indicator until
-  `placed_n ≥ 5`.
+  users who actually saw the item: submit requires at least one placed item,
+  and any active item left unplaced at submit time (or on later saves of a
+  submitted ranking) is auto-recorded as an explicit skip row — so a
+  submitted ranking still carries one row per active item and the denominator
+  stays honest. Items added to the shared set *after* a user ranked are
+  simply absent from that user's rows (neither placed nor skipped) until a
+  re-rank. "NEW" badge + low-n indicator until `placed_n ≥ 5`.
 - **Controversy** = normalized Shannon entropy of the item's tier distribution
   (0–1; even split across all tiers = 1 = "most contested"), computed in JS
   from the distribution already fetched. Chosen over variance because the
@@ -330,9 +332,11 @@ capability, not something to fake app-side.
 - **Tap-to-place fallback (one-handed):** tap a tray chip → tier letter
   buttons appear → tap a tier. Also the accessibility path.
 - **Skip is first-class:** every tray chip has a skip affordance ("haven't
-  seen it"); submit is enabled only when the tray is empty (everything placed
-  or skipped) — this is what makes skip-% denominators honest. Skipped items
-  sit in a collapsed "skipped" shelf and can be pulled back.
+  seen it"); submit is enabled once **at least one item is placed in a tier**
+  (skips alone don't count), and anything still in the tray at submit time is
+  auto-recorded as an explicit skip — this is what makes skip-% denominators
+  honest with partial rankings. Skipped items sit in a collapsed "skipped"
+  shelf and can be pulled back.
 - **Rank-first reveal:** the aggregate is hidden on `/t/:id` until the viewer
   has submitted. Submit navigates to `/t/:id/results` — the reveal: alignment
   %, hottest take, most contested, community grid (median per item; tapping an
