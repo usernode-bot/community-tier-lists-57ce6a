@@ -17,6 +17,7 @@
     { "name": "Home renders", "path": "/", "expectText": "Today's List" },
     { "name": "Rank screen renders", "path": "/t/900001", "expectSelector": "[data-tier-row]" },
     { "name": "Results peek renders", "path": "/t/900001/results", "expectText": "rankings" },
+    { "name": "Inline comments render on results", "path": "/t/900001/results", "expectText": "Staging demo comment" },
     { "name": "Create screen renders", "path": "/new", "expectText": "Tier scale" }
   ]
 }

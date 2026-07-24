@@ -586,6 +586,47 @@ app.post('/api/ai/canonicalize', wrap(async (req, res) => {
 
 // ---------- Comments ----------
 
+// Live comment streams: template id -> Set of open SSE responses. In-memory
+// is correct here — each app runs as a single container/process.
+const commentStreams = new Map();
+setInterval(() => {
+  for (const [key, set] of commentStreams) {
+    for (const res of set) {
+      try { res.write(': ka\n\n'); } catch { set.delete(res); }
+    }
+    if (!set.size) commentStreams.delete(key);
+  }
+}, 25000).unref();
+
+function broadcastComment(templateId, comment) {
+  const set = commentStreams.get(String(templateId));
+  if (!set) return;
+  const payload = `event: comment\ndata: ${JSON.stringify(comment)}\n\n`;
+  for (const res of set) {
+    try { res.write(payload); } catch { set.delete(res); }
+  }
+}
+
+app.get('/api/templates/:id/comments/stream', wrap(async (req, res) => {
+  const t = await loadTemplate(req.params.id);
+  await assertCanSee(t, req.user);
+  res.writeHead(200, {
+    'content-type': 'text/event-stream',
+    'cache-control': 'no-cache',
+    connection: 'keep-alive',
+    'x-accel-buffering': 'no',
+  });
+  res.write(': connected\n\n');
+  const key = String(t.id);
+  let set = commentStreams.get(key);
+  if (!set) commentStreams.set(key, (set = new Set()));
+  set.add(res);
+  req.on('close', () => {
+    set.delete(res);
+    if (!set.size) commentStreams.delete(key);
+  });
+}));
+
 app.get('/api/templates/:id/comments', wrap(async (req, res) => {
   const t = await loadTemplate(req.params.id);
   await assertCanSee(t, req.user);
@@ -593,7 +634,7 @@ app.get('/api/templates/:id/comments', wrap(async (req, res) => {
     `SELECT c.id::text, c.item_id::text AS item_id, c.username, c.body, c.created_at, i.name AS item_name
      FROM comments c LEFT JOIN template_items i ON i.id = c.item_id
      WHERE c.template_id = $1 AND NOT c.hidden
-     ORDER BY c.created_at ASC LIMIT 200`, [t.id])).rows;
+     ORDER BY c.created_at DESC, c.id DESC LIMIT 200`, [t.id])).rows;
   const ids = comments.map((c) => c.id);
   const reactions = {};
   if (ids.length) {
@@ -626,7 +667,14 @@ app.post('/api/templates/:id/comments', wrap(async (req, res) => {
      VALUES ($1, $2, $3, $4, $5)
      RETURNING id::text, item_id::text AS item_id, username, body, created_at`,
     [t.id, itemId, req.user.id, req.user.username, body]);
-  res.json({ comment: { ...ins.rows[0], reactions: [] } });
+  let itemName = null;
+  if (itemId) {
+    const named = await pool.query('SELECT name FROM template_items WHERE id = $1', [itemId]);
+    itemName = named.rows.length ? named.rows[0].name : null;
+  }
+  const comment = { ...ins.rows[0], item_name: itemName, reactions: [] };
+  broadcastComment(t.id, comment);
+  res.json({ comment });
 }));
 
 app.post('/api/comments/:id/react', wrap(async (req, res) => {

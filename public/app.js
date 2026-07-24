@@ -133,6 +133,7 @@
   ];
 
   async function route() {
+    closeCommentStream();
     const path = location.pathname;
     for (const [re, fn] of ROUTES) {
       const m = path.match(re);
@@ -356,7 +357,9 @@
       submit.disabled = true;
       try {
         await saveRanking(true);
-        transition(() => nav('/t/' + t.id + '/results'), 'push');
+        // Replace the editor in history so back from results lands on home,
+        // not on the ranking screen the user just finished.
+        transition(() => nav('/t/' + t.id + '/results', true), 'push');
       } catch (err) {
         toast(err.message);
         submit.disabled = false;
@@ -506,7 +509,7 @@
 
   // ---------- Results / reveal / peek ----------
 
-  async function renderResults(id, openComments) {
+  async function renderResults(id, scrollToComments) {
     loading('…');
     const [data, agg] = await Promise.all([
       api('/api/templates/' + id),
@@ -568,7 +571,9 @@
     const groupBtns = (await getHome()).groups.map((g) =>
       `<button data-groupcmp="${g.id}" class="card px-3 py-2 text-[12.5px] font-bold un-pressable">${esc(g.name)} vs the world</button>`).join('');
 
-    screen(`${header(esc(t.title), { back: '/t/' + id })}
+    const hasHotTake = !!(stats && stats.hottest && stats.hottest.distance > 0);
+
+    screen(`${header(esc(t.title), { back: '/' })}
     <main class="max-w-xl mx-auto p-4 pb-10 un-safe-bottom">
       ${data.daily ? `<div class="text-[11px] font-bold uppercase tracking-widest mb-2" style="color:var(--accent)">Today's List · No. ${data.daily.edition_no}${data.daily.is_final ? ' · final verdict' : ' · live'}</div>` : ''}
       ${revealHtml}
@@ -580,13 +585,23 @@
       ${gridRows}
       ${noDataHtml}
       ${mineSubmitted ? `<div class="grid grid-cols-2 gap-2 mt-4">
-        <button id="share-grid" class="btn-primary" style="width:auto">SHARE MY GRID</button>
-        <button id="share-take" class="btn-primary" style="width:auto" ${stats.hottest && stats.hottest.distance > 0 ? '' : 'disabled'}>SHARE MY TAKE</button>
-      </div>` : ''}
-      <div class="grid grid-cols-2 gap-2 mt-2">
-        <button data-nav="/t/${id}" class="card px-3 py-3 text-[13px] font-bold un-pressable">✏️ ${mineSubmitted ? 'Edit my ranking' : 'Rank this list'}</button>
-        <button id="open-comments" class="card px-3 py-3 text-[13px] font-bold un-pressable">💬 Comments (${agg.total_comments})</button>
+        <button id="share-grid" class="btn-primary" style="width:auto">SHARE MY GRID<span class="block text-[10px] font-semibold opacity-75">your full grid</span></button>
+        <button id="share-take" class="btn-primary" style="width:auto" ${hasHotTake ? '' : 'disabled'}>SHARE MY TAKE<span class="block text-[10px] font-semibold opacity-75">your hottest take</span></button>
       </div>
+      ${hasHotTake ? '' : '<div class="text-[12px] mt-1 text-center" style="color:var(--ink-soft)">No hot takes to share — you agree with the crowd.</div>'}` : ''}
+      <button data-nav="/t/${id}" class="card w-full px-3 py-3 mt-2 text-[13px] font-bold un-pressable">✏️ ${mineSubmitted ? 'Edit my ranking' : 'Rank this list'}</button>
+      <section id="comments-section" class="mt-4">
+        <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Comments (<span id="c-count">${agg.total_comments}</span>)</div>
+        <div class="card p-2 mb-2">
+          <select id="c-anchor" class="mb-2 text-[13px]">
+            <option value="">Whole list</option>
+            ${data.items.map((it) => `<option value="${it.id}">re: ${esc(it.name)}</option>`).join('')}
+          </select>
+          <textarea id="c-body" rows="2" placeholder="Say it. Politely-ish."></textarea>
+          <button id="c-post" class="btn-primary mt-2" style="padding:9px">Post</button>
+        </div>
+        <div id="c-list" class="text-sm" style="color:var(--ink-soft)">Loading…</div>
+      </section>
       ${agg.rankers.length && data.my.status === 'submitted' ? `<div class="mt-4">
         <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Head-to-head</div>
         <div class="flex flex-wrap gap-2">${agg.rankers.slice(0, 10).map((u) =>
@@ -599,11 +614,17 @@
     </main>`);
 
     document.querySelectorAll('[data-dist]').forEach((chip) => chip.addEventListener('click', () => {
-      showDistribution(byId[chip.getAttribute('data-dist')], agg, labels, t);
+      showDistribution(byId[chip.getAttribute('data-dist')], agg, labels);
     }));
-    const oc = document.getElementById('open-comments');
-    if (oc) oc.addEventListener('click', () => showComments(t, data.items));
-    if (openComments) showComments(t, data.items);
+    setupComments(t, agg.total_comments);
+    if (scrollToComments) {
+      // route() scrolls to the top right after this render; queue the
+      // comments scroll behind it.
+      setTimeout(() => {
+        const sec = document.getElementById('comments-section');
+        if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+      }, 0);
+    }
 
     const sg = document.getElementById('share-grid');
     if (sg) sg.addEventListener('click', () => shareGridCard(t, data, agg, stats));
@@ -613,7 +634,7 @@
       showGroupCompare(t, data.items, agg, b.getAttribute('data-groupcmp'), b.textContent)));
   }
 
-  function showDistribution(item, agg, labels, t) {
+  function showDistribution(item, agg, labels) {
     if (!item) return;
     const a = agg.items[item.id];
     const total = a ? a.placed : 0;
@@ -637,7 +658,15 @@
       <button id="dist-comment" class="mt-3 text-[13px] font-bold" style="color:var(--accent)">💬 comment on ${esc(item.name)}</button>
     `);
     const dc = document.getElementById('dist-comment');
-    if (dc) dc.addEventListener('click', () => { close(); showComments(t, null, item); });
+    if (dc) dc.addEventListener('click', () => {
+      close();
+      const sel = document.getElementById('c-anchor');
+      if (sel) sel.value = item.id;
+      const sec = document.getElementById('comments-section');
+      if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+      const box = document.getElementById('c-body');
+      if (box) box.focus({ preventScroll: true });
+    });
   }
 
   async function showGroupCompare(t, items, globalAgg, groupId, label) {
@@ -661,68 +690,107 @@
     } catch (err) { toast(err.message); }
   }
 
-  // ---------- Comments ----------
+  // ---------- Comments (inline on the results screen) ----------
 
-  async function showComments(t, items, anchorItem) {
-    let list = items;
-    if (!list) {
-      try { list = (await api('/api/templates/' + t.id)).items; } catch { list = []; }
+  let commentStream = null;
+  function closeCommentStream() {
+    if (commentStream) { commentStream.close(); commentStream = null; }
+  }
+
+  const COMMENTS_SHOWN = 30;
+
+  function setupComments(t, initialTotal) {
+    const listEl = document.getElementById('c-list');
+    if (!listEl) return;
+    let comments = [];   // newest-first, mirrors the API ordering
+    let total = initialTotal || 0;
+    let expanded = false;
+    let loaded = false;
+
+    const setCount = () => {
+      const el = document.getElementById('c-count');
+      if (el) el.textContent = total;
+    };
+
+    function renderList() {
+      if (!loaded) return;
+      if (!comments.length) { listEl.innerHTML = 'No comments yet — start the argument.'; return; }
+      const shown = expanded ? comments : comments.slice(0, COMMENTS_SHOWN);
+      const hiddenCount = comments.length - shown.length;
+      listEl.innerHTML = shown.map((c) => `
+        <div class="py-2" style="border-bottom:1px solid var(--paper-deep)">
+          <div class="text-[12px]" style="color:var(--ink-soft)"><b style="color:var(--ink)">${esc(c.username)}</b>
+            ${c.item_name ? ` · re: <b>${esc(c.item_name)}</b>` : ''}</div>
+          <div class="text-[14px] mt-0.5" style="color:var(--ink)">${esc(c.body)}</div>
+          <div class="flex gap-1.5 mt-1 items-center">
+            ${['👍', '🔥', '😂', '❤️'].map((e) => {
+              const r = (c.reactions || []).find((x) => x.emoji === e);
+              return `<button data-react="${c.id}:${e}" class="text-[12px] px-1.5 py-0.5 rounded-full border ${r && r.mine ? 'font-bold' : ''}" style="border-color:${r && r.mine ? 'var(--accent)' : 'var(--line)'}">${e}${r ? ' ' + r.count : ''}</button>`;
+            }).join('')}
+            <button data-creport="${c.id}" class="ml-auto text-[11px]" style="color:var(--ink-soft)">report</button>
+          </div>
+        </div>`).join('')
+        + (hiddenCount > 0 ? `<button id="c-more" class="mt-2 text-[13px] font-bold" style="color:var(--accent)">show earlier comments (${hiddenCount})</button>` : '');
+      const more = listEl.querySelector('#c-more');
+      if (more) more.addEventListener('click', () => { expanded = true; renderList(); });
+      listEl.querySelectorAll('[data-react]').forEach((b) => b.addEventListener('click', async () => {
+        const [cid, emoji] = b.getAttribute('data-react').split(':');
+        try { await api(`/api/comments/${cid}/react`, { method: 'POST', body: { emoji } }); refresh(); } catch (err) { toast(err.message); }
+      }));
+      listEl.querySelectorAll('[data-creport]').forEach((b) => b.addEventListener('click', () =>
+        reportFlow('comment', b.getAttribute('data-creport'))));
     }
-    const { panel, close } = showSheet(`
-      <div class="font-display font-black text-lg mb-2">Comments</div>
-      <div id="c-list" class="mb-3 text-sm" style="color:var(--ink-soft)">Loading…</div>
-      <div class="card p-2">
-        <select id="c-anchor" class="mb-2 text-[13px]">
-          <option value="">Whole list</option>
-          ${list.map((it) => `<option value="${it.id}" ${anchorItem && anchorItem.id === it.id ? 'selected' : ''}>re: ${esc(it.name)}</option>`).join('')}
-        </select>
-        <textarea id="c-body" rows="2" placeholder="${anchorItem ? 'Your take on ' + esc(anchorItem.name) + '…' : 'Say it. Politely-ish.'}"></textarea>
-        <button id="c-post" class="btn-primary mt-2" style="padding:9px">Post</button>
-      </div>
-    `);
 
     async function refresh() {
       try {
-        const { comments } = await api(`/api/templates/${t.id}/comments`);
-        const el = panel.querySelector('#c-list');
-        if (!comments.length) { el.innerHTML = 'No comments yet — start the argument.'; return; }
-        el.innerHTML = comments.map((c) => `
-          <div class="py-2" style="border-bottom:1px solid var(--paper-deep)">
-            <div class="text-[12px]" style="color:var(--ink-soft)"><b style="color:var(--ink)">${esc(c.username)}</b>
-              ${c.item_name ? ` · re: <b>${esc(c.item_name)}</b>` : ''}</div>
-            <div class="text-[14px] mt-0.5" style="color:var(--ink)">${esc(c.body)}</div>
-            <div class="flex gap-1.5 mt-1 items-center">
-              ${['👍', '🔥', '😂', '❤️'].map((e) => {
-                const r = (c.reactions || []).find((x) => x.emoji === e);
-                return `<button data-react="${c.id}:${e}" class="text-[12px] px-1.5 py-0.5 rounded-full border ${r && r.mine ? 'font-bold' : ''}" style="border-color:${r && r.mine ? 'var(--accent)' : 'var(--line)'}">${e}${r ? ' ' + r.count : ''}</button>`;
-              }).join('')}
-              <button data-creport="${c.id}" class="ml-auto text-[11px]" style="color:var(--ink-soft)">report</button>
-            </div>
-          </div>`).join('');
-        el.querySelectorAll('[data-react]').forEach((b) => b.addEventListener('click', async () => {
-          const [cid, emoji] = b.getAttribute('data-react').split(':');
-          try { await api(`/api/comments/${cid}/react`, { method: 'POST', body: { emoji } }); refresh(); } catch (err) { toast(err.message); }
-        }));
-        el.querySelectorAll('[data-creport]').forEach((b) => b.addEventListener('click', () =>
-          reportFlow('comment', b.getAttribute('data-creport'))));
+        const fetched = (await api(`/api/templates/${t.id}/comments`)).comments;
+        // Keep anything that streamed in while the fetch was in flight.
+        const have = new Set(fetched.map((c) => c.id));
+        comments = comments.filter((c) => !have.has(c.id)).concat(fetched);
+        loaded = true;
+        renderList();
       } catch (err) {
-        panel.querySelector('#c-list').textContent = err.message;
+        listEl.textContent = err.message;
       }
     }
+
+    function addComment(c) {
+      if (!c || comments.some((x) => x.id === c.id)) return;
+      comments.unshift(c);
+      total += 1;
+      loaded = true;
+      setCount();
+      renderList();
+    }
+
     refresh();
 
-    panel.querySelector('#c-post').addEventListener('click', async () => {
-      const body = panel.querySelector('#c-body').value.trim();
+    document.getElementById('c-post').addEventListener('click', async () => {
+      const box = document.getElementById('c-body');
+      const body = box.value.trim();
       if (!body) return;
+      const btn = document.getElementById('c-post');
+      btn.disabled = true;
       try {
-        await api(`/api/templates/${t.id}/comments`, {
+        const r = await api(`/api/templates/${t.id}/comments`, {
           method: 'POST',
-          body: { body, item_id: panel.querySelector('#c-anchor').value || null },
+          body: { body, item_id: document.getElementById('c-anchor').value || null },
         });
-        panel.querySelector('#c-body').value = '';
-        refresh();
+        box.value = '';
+        addComment(r.comment);
       } catch (err) { toast(err.message); }
+      btn.disabled = false;
     });
+
+    // Live updates: server streams comments posted by anyone on this
+    // template; id-dedupe absorbs the echo of our own posts.
+    closeCommentStream();
+    try {
+      commentStream = new EventSource(urlWithToken(`/api/templates/${t.id}/comments/stream`));
+      commentStream.addEventListener('comment', (e) => {
+        try { addComment(JSON.parse(e.data)); } catch { /* malformed frame */ }
+      });
+    } catch { /* EventSource unavailable — list still works via refresh */ }
   }
 
   // ---------- Compare ----------
