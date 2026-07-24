@@ -52,17 +52,58 @@
     setTimeout(() => t.remove(), 2400);
   }
 
-  function showSheet(html) {
+  function showSheet(html, onClose) {
     const back = document.createElement('div');
     back.className = 'sheet-backdrop';
     const panel = document.createElement('div');
     panel.className = 'sheet-panel';
     panel.innerHTML = html;
-    const close = () => { back.remove(); panel.remove(); };
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      back.remove(); panel.remove();
+      if (onClose) onClose();
+    };
     back.addEventListener('click', close);
     document.body.appendChild(back);
     document.body.appendChild(panel);
     return { panel, close };
+  }
+
+  // In-app replacement for window.prompt(), which the browser blocks in
+  // the cross-origin platform iframe (returns null without showing).
+  // Resolves the entered string ('' allowed) on confirm, null on cancel.
+  async function askText({ title, placeholder = '', confirmLabel = 'OK', initial = '' } = {}) {
+    if (window.unNative && unNative.alert) {
+      let confirmed = false;
+      const r = await unNative.alert({
+        title,
+        field: { placeholder, value: initial },
+        buttons: [
+          { label: 'Cancel', style: 'cancel' },
+          { label: confirmLabel, style: 'default', handler: () => { confirmed = true; } },
+        ],
+      });
+      if (!confirmed) return null;
+      return r && r.value != null ? String(r.value) : '';
+    }
+    return new Promise((resolve) => {
+      let result = null;
+      const { panel, close } = showSheet(`
+        <div class="font-display font-black text-lg mb-2">${esc(title || '')}</div>
+        <input id="ask-input" type="text" placeholder="${esc(placeholder)}" value="${esc(initial)}">
+        <div class="grid grid-cols-2 gap-2 mt-3">
+          <button id="ask-cancel" class="btn-primary" style="background:transparent;color:var(--ink);border:1px solid var(--line)">Cancel</button>
+          <button id="ask-ok" class="btn-primary">${esc(confirmLabel)}</button>
+        </div>`, () => resolve(result));
+      const input = panel.querySelector('#ask-input');
+      const ok = () => { result = input.value; close(); };
+      panel.querySelector('#ask-ok').addEventListener('click', ok);
+      panel.querySelector('#ask-cancel').addEventListener('click', () => close());
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok(); });
+      input.focus({ preventScroll: true });
+    });
   }
 
   function urlWithToken(path) {
@@ -217,7 +258,7 @@
 
     const ng = document.getElementById('new-group');
     if (ng) ng.addEventListener('click', async () => {
-      const name = prompt('Group name');
+      const name = await askText({ title: 'New group', placeholder: 'Group name', confirmLabel: 'Create' });
       if (!name) return;
       try {
         const g = await api('/api/groups', { method: 'POST', body: { name } });
@@ -482,7 +523,7 @@
   }
 
   async function addItemFlow(t) {
-    const name = prompt('Item name');
+    const name = await askText({ title: 'Add an item', placeholder: 'Item name', confirmLabel: 'Add' });
     if (!name) return;
     try {
       const r = await api(`/api/templates/${t.id}/items`, { method: 'POST', body: { name } });
@@ -499,7 +540,7 @@
   }
 
   async function reportFlow(type, id) {
-    const reason = prompt('Why are you reporting this? (optional)') ;
+    const reason = await askText({ title: 'Report', placeholder: 'Why? (optional)', confirmLabel: 'Report' });
     if (reason === null) return;
     try {
       const r = await api('/api/report', { method: 'POST', body: { content_type: type, content_id: id, reason } });
@@ -592,15 +633,18 @@
       <button data-nav="/t/${id}" class="card w-full px-3 py-3 mt-2 text-[13px] font-bold un-pressable">✏️ ${mineSubmitted ? 'Edit my ranking' : 'Rank this list'}</button>
       <section id="comments-section" class="mt-4">
         <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Comments (<span id="c-count">${agg.total_comments}</span>)</div>
-        <div class="card p-2 mb-2">
-          <select id="c-anchor" class="mb-2 text-[13px]">
+        <div class="card p-3 mb-2">
+          <div class="text-[12px] font-bold mb-1" style="color:var(--ink-soft)">ADD A COMMENT</div>
+          <select id="c-anchor" class="mb-2">
             <option value="">Whole list</option>
             ${data.items.map((it) => `<option value="${it.id}">re: ${esc(it.name)}</option>`).join('')}
           </select>
           <textarea id="c-body" rows="2" placeholder="Say it. Politely-ish."></textarea>
-          <button id="c-post" class="btn-primary mt-2" style="padding:9px">Post</button>
+          <button id="c-post" class="btn-primary mt-2" style="width:auto;padding:9px 16px">Post</button>
         </div>
-        <div id="c-list" class="text-sm" style="color:var(--ink-soft)">Loading…</div>
+        <div class="card px-3 py-1">
+          <div id="c-list" class="text-sm py-2" style="color:var(--ink-soft)">Loading…</div>
+        </div>
       </section>
       ${agg.rankers.length && data.my.status === 'submitted' ? `<div class="mt-4">
         <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Head-to-head</div>
@@ -717,8 +761,8 @@
       if (!comments.length) { listEl.innerHTML = 'No comments yet — start the argument.'; return; }
       const shown = expanded ? comments : comments.slice(0, COMMENTS_SHOWN);
       const hiddenCount = comments.length - shown.length;
-      listEl.innerHTML = shown.map((c) => `
-        <div class="py-2" style="border-bottom:1px solid var(--paper-deep)">
+      listEl.innerHTML = shown.map((c, i) => `
+        <div class="py-2" style="${i < shown.length - 1 ? 'border-bottom:1px solid var(--paper-deep)' : ''}">
           <div class="text-[12px]" style="color:var(--ink-soft)"><b style="color:var(--ink)">${esc(c.username)}</b>
             ${c.item_name ? ` · re: <b>${esc(c.item_name)}</b>` : ''}</div>
           <div class="text-[14px] mt-0.5" style="color:var(--ink)">${esc(c.body)}</div>
