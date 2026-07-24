@@ -18,6 +18,7 @@
     { "name": "Rank screen renders", "path": "/t/900001", "expectSelector": "[data-tier-row]" },
     { "name": "Results peek renders", "path": "/t/900001/results", "expectText": "rankings" },
     { "name": "Inline comments render on results", "path": "/t/900001/results", "expectText": "Staging demo comment" },
+    { "name": "Comment composer renders styled", "path": "/t/900001/results", "expectText": "ADD A COMMENT" },
     { "name": "Create screen renders", "path": "/new", "expectText": "Tier scale" }
   ]
 }
