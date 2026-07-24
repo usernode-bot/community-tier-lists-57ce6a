@@ -1,6 +1,6 @@
 {
   "name": "Community Tier Lists",
-  "icon": { "emoji": "🏆" },
+  "icon": { "emoji": "📊" },
   "llm": {
     "purpose": "Suggests and dedupes tier-list items from your title",
     "suggested_daily_cap_cents": 50
