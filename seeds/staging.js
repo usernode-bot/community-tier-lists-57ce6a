@@ -129,7 +129,8 @@ async function seedStaging(pool) {
     }
   }
 
-  // --- Comments (one template-level, one item-anchored) ---
+  // --- Comments (template-level and item-anchored, so the inline thread
+  // on /t/900001/results has a few rows) ---
   await pool.query(
     `INSERT INTO comments (id, template_id, item_id, user_id, username, body)
      VALUES (900001, 900001, NULL, $1, $2, 'Staging demo comment — pancakes are clearly S tier.')
@@ -141,6 +142,12 @@ async function seedStaging(pool) {
      VALUES (900002, 900001, 900106, $1, $2, 'Staging demo comment — smoothie bowls are dessert, fight me.')
      ON CONFLICT (id) DO NOTHING`,
     [u[2].id, u[2].username]
+  );
+  await pool.query(
+    `INSERT INTO comments (id, template_id, item_id, user_id, username, body)
+     VALUES (900003, 900001, 900105, $1, $2, 'Staging demo comment — oatmeal deserves better than D tier.')
+     ON CONFLICT (id) DO NOTHING`,
+    [u[3].id, u[3].username]
   );
 
   // --- Open reports + a rate-anomaly flag so /mod renders ---

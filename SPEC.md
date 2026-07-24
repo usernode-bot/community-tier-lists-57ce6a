@@ -37,7 +37,7 @@ implementation PR.
   | `/t/:id` | Ranking screen (default entry — rank-first) |
   | `/t/:id/results` | Aggregate / reveal / peek view |
   | `/t/:id/compare/:username` | Head-to-head compare |
-  | `/t/:id/comments` | Comment sheet deep link (opens as sheet over results) |
+  | `/t/:id/comments` | Deep link to results, scrolled to the inline comments section |
   | `/new` | Template creation (AI-assisted) |
   | `/g/:id` | Group space |
   | `/g/join/:code` | Invite-link landing (joins group, forwards to `/g/:id`) |
@@ -53,7 +53,9 @@ implementation PR.
   tier ramp `S #E4573D · A #E5A83B · B #7FB542 · C #3F97E8 · D #8A6FDF`.
   Tier letters always accompany hue (colorblind-safe); ≥44pt touch targets.
 - **Back rule:** Home is root; every non-Home screen has ← to Home (or its
-  parent); sheets dismiss in place.
+  parent); sheets dismiss in place. The results screen's ← always goes Home
+  (editing stays reachable via its "Edit my ranking" button, and submit
+  replaces the editor in history).
 
 ## 2. Data model
 
