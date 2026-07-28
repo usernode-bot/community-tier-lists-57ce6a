@@ -18,6 +18,24 @@ const BREAKFAST_ITEMS = [
   { id: 900106, name: 'Smoothie bowl', emoji: '🍓', tiers: [5, 1, 2, 5, 3] },
   { id: 900107, name: 'Bagel', emoji: '🥯', tiers: [3, 3, 2, 4, 3] },
   { id: 900108, name: 'Full English', emoji: '🍽️', tiers: [1, null, null, 2, null] },
+  // Deliberately polarized (S vs D) so clash counts, the breakdown line and
+  // "most contested" all render non-trivially on the reveal (issue #14).
+  { id: 900109, name: 'Cold pizza', emoji: '🍕', tiers: [1, 5, 1, 5, 3] },
+  { id: 900110, name: 'Grapefruit', emoji: '🍊', tiers: [5, 1, 5, 1, 4] },
+];
+
+// Two near-inverse rankings on template 900004: the fixture for the even-n
+// leave-one-out path and for a head-to-head with multiple clashes. Verifying
+// the viewer-relative screens (reveal headline, head-to-head) on staging means
+// ranking this list as YOURSELF — a tester's own ranking can't be seeded — then
+// opening "vs staging-demo-user-1" from the results screen.
+const DIVIDED_ITEMS = [
+  { id: 900401, name: 'Pineapple on pizza', emoji: '🍍', tiers: [1, 5] },
+  { id: 900402, name: 'Cilantro', emoji: '🌿', tiers: [1, 4] },
+  { id: 900403, name: 'Black licorice', emoji: '🍬', tiers: [2, 3] },
+  { id: 900404, name: 'Candy corn', emoji: '🌽', tiers: [5, 1] },
+  { id: 900405, name: 'Marmite', emoji: '🫙', tiers: [4, 1] },
+  { id: 900406, name: 'Well-done steak', emoji: '🥩', tiers: [3, 2] },
 ];
 
 async function seedStaging(pool) {
@@ -125,6 +143,36 @@ async function seedStaging(pool) {
         `INSERT INTO ranking_items (ranking_id, item_id, tier) VALUES ($1, $2, $3)
          ON CONFLICT DO NOTHING`,
         [900007 + r, 900301 + i, groupTiers[r][i]]
+      );
+    }
+  }
+
+  // --- Demo template 4: two near-inverse rankings (clashes + even-n median) ---
+  await pool.query(
+    `INSERT INTO templates (id, title, category, author_id, author_username, visibility, item_policy)
+     VALUES (900004, 'Staging demo: divided opinions', 'Food', $1, $2, 'public', 'open')
+     ON CONFLICT (id) DO NOTHING`,
+    [u[0].id, u[0].username]
+  );
+  for (const it of DIVIDED_ITEMS) {
+    await pool.query(
+      `INSERT INTO template_items (id, template_id, name, canonical_key, emoji)
+       VALUES ($1, 900004, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+      [it.id, it.name, it.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), it.emoji]
+    );
+  }
+  for (let r = 0; r < 2; r++) {
+    await pool.query(
+      `INSERT INTO rankings (id, template_id, user_id, username, status, submitted_at)
+       VALUES ($1, 900004, $2, $3, 'submitted', now() - ($4 || ' hours')::interval)
+       ON CONFLICT (id) DO NOTHING`,
+      [900009 + r, u[r].id, u[r].username, String(3 + r * 4)]
+    );
+    for (const it of DIVIDED_ITEMS) {
+      await pool.query(
+        `INSERT INTO ranking_items (ranking_id, item_id, tier) VALUES ($1, $2, $3)
+         ON CONFLICT DO NOTHING`,
+        [900009 + r, it.id, it.tiers[r]]
       );
     }
   }

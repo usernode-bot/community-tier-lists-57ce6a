@@ -197,6 +197,15 @@
   const tierLetterChip = (labels, tier) => tier == null ? '<span class="badge" style="background:var(--tint-neutral-bg);color:var(--tint-neutral-fg)">skip</span>'
     : `<span class="badge" style="background:${tierColor(tier - 1)};color:#fff">${esc(labels[tier - 1] || tier)}</span>`;
 
+  // "6 exact · 1 one tier off · 1 clash" — the disagreements behind the
+  // headline %, always rendered so a high score can't hide them (issue #14).
+  const breakdownLine = (s) => {
+    const parts = [`${s.exact} exact`];
+    if (s.near) parts.push(`${s.near} one tier off`);
+    if (s.clashes) parts.push(`${s.clashes} clash${s.clashes === 1 ? '' : 'es'}`);
+    return parts.join(' · ');
+  };
+
   const CHEV = '<span class="chev" aria-hidden="true">›</span>';
 
   const statusPill = (myStatus) => myStatus === 'submitted'
@@ -583,8 +592,11 @@
     const byId = {};
     for (const it of data.items) byId[it.id] = it;
 
-    const mineSubmitted = data.my.status === 'submitted' && agg.my && agg.my.stats;
-    const stats = mineSubmitted ? agg.my.stats : null;
+    // Submitted-ness and having an alignment score are separate states now:
+    // leave-one-out scoring returns nothing until someone ELSE has ranked, so a
+    // first ranker is submitted-but-unscored (issue #14).
+    const mineSubmitted = data.my.status === 'submitted';
+    const stats = mineSubmitted && agg.my ? agg.my.stats : null;
 
     let revealHtml = '';
     if (stats) {
@@ -593,11 +605,20 @@
       revealHtml = `
         <div class="card p-4 text-center mb-2">
           <div class="font-display font-black text-4xl">${stats.alignment}% aligned</div>
-          <div class="text-[13px] mt-1" style="color:var(--ink-soft)">with ${agg.n} ranker${agg.n === 1 ? '' : 's'} · ${stats.ranked} items placed</div>
+          <div class="text-[13px] mt-1" style="color:var(--ink-soft)">with ${stats.others_n} other ranker${stats.others_n === 1 ? '' : 's'} · ${stats.compared} item${stats.compared === 1 ? '' : 's'} compared</div>
+          <div class="text-[12.5px] mt-1 font-bold">${breakdownLine(stats)}</div>
         </div>
         ${hotItem && hot.distance > 0 ? `<div class="card p-3 mb-2 text-sm">
-          <b>Your hottest take</b> — ${esc(hotItem.name)} in ${tierLetterChip(labels, hot.mine)} (community: ${tierLetterChip(labels, hot.community)}) · top ${hot.percentile}% contrarian
-        </div>` : agg.n > 1 ? '<div class="card p-3 mb-2 text-sm"><b>No hot takes</b> — you agree with the crowd on everything. Suspicious. 🤨</div>' : ''}`;
+          <b>Your hottest take</b> — ${esc(hotItem.name)} in ${tierLetterChip(labels, hot.mine)} (the others: ${tierLetterChip(labels, hot.community)}) · top ${hot.percentile}% contrarian
+        </div>` : hotItem ? `<div class="card p-3 mb-2 text-sm">
+          <b>Most divided</b> — ${esc(hotItem.name)}: you say ${tierLetterChip(labels, hot.mine)} and the others are split around you, so only ${Math.round(hot.credit * 100)}% of them agree.
+        </div>` : '<div class="card p-3 mb-2 text-sm"><b>No hot takes</b> — you agree with the crowd on everything. Suspicious. 🤨</div>'}`;
+    } else if (mineSubmitted) {
+      revealHtml = `<div class="card p-4 mb-2 text-sm" style="background:var(--peek-bg);border-color:var(--card-line-hover)">
+        <div class="font-display font-black text-lg mb-1">You're the first ranker 🥇</div>
+        Your ranking is in ✓ — there's nobody to be aligned <i>with</i> yet. Your alignment % and
+        hottest take unlock as soon as someone else ranks this list.
+      </div>`;
     } else {
       revealHtml = `<div class="card p-3 mb-2 text-sm" style="background:var(--peek-bg);border-color:var(--card-line-hover)">
         <b>You're peeking.</b> The community grid is below — your own reveal (alignment %, hottest take) unlocks when you rank.
@@ -650,7 +671,7 @@
         <button id="share-grid" class="btn-primary" style="width:auto">SHARE MY GRID<span class="block text-[10px] font-semibold opacity-75">your full grid</span></button>
         <button id="share-take" class="btn-primary" style="width:auto" ${hasHotTake ? '' : 'disabled'}>SHARE MY TAKE<span class="block text-[10px] font-semibold opacity-75">your hottest take</span></button>
       </div>
-      ${hasHotTake ? '' : '<div class="text-[12px] mt-1 text-center" style="color:var(--ink-soft)">No hot takes to share — you agree with the crowd.</div>'}` : ''}
+      ${hasHotTake ? '' : `<div class="text-[12px] mt-1 text-center" style="color:var(--ink-soft)">${stats ? 'No hot takes to share — you agree with the crowd.' : 'Nobody else has ranked this yet — no take to compare.'}</div>`}` : ''}
       <button data-nav="/t/${id}" class="card w-full px-3 py-3 mt-2 text-[13px] font-bold un-pressable">✏️ ${mineSubmitted ? 'Edit my ranking' : 'Rank this list'}</button>
       <section id="comments-section" class="mt-4">
         <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Comments (<span id="c-count">${agg.total_comments}</span>)</div>
@@ -876,16 +897,30 @@
       throw err;
     }
     const labels = cmp.tier_labels;
-    const biggest = cmp.items[0];
+    const clashRows = cmp.items.filter((r) => r.distance >= cmp.clash_threshold);
+    const notCompared = [];
+    if (cmp.only_mine.length) notCompared.push(`${cmp.only_mine.length} only you placed`);
+    if (cmp.only_theirs.length) notCompared.push(`${cmp.only_theirs.length} only ${esc(cmp.username)} placed`);
+    if (cmp.unavailable.length) notCompared.push(`${cmp.unavailable.length} no longer in this list`);
+
     screen(`${header('You vs ' + esc(cmp.username), { back: `/t/${id}/results` })}
     <main class="max-w-xl mx-auto p-4 un-safe-bottom">
-      <div class="text-[13px] mb-2" style="color:var(--ink-soft)">“${esc(cmp.title)}” · ${cmp.shared} items you both placed</div>
+      <div class="text-[13px] mb-2" style="color:var(--ink-soft)">“${esc(cmp.title)}”</div>
       <div class="card p-4 text-center mb-2">
         <div class="font-display font-black text-4xl">${cmp.alignment == null ? '—' : cmp.alignment + '%'} aligned</div>
+        <div class="text-[13px] mt-1" style="color:var(--ink-soft)">${cmp.shared} item${cmp.shared === 1 ? '' : 's'} you both placed</div>
+        ${cmp.shared ? `<div class="text-[12.5px] mt-1 font-bold">${breakdownLine(cmp)}</div>` : ''}
+        ${cmp.coverage_thin ? `<div class="text-[12px] mt-1" style="color:var(--tint-danger-fg)">thin overlap — only ${cmp.shared} item${cmp.shared === 1 ? '' : 's'} in common</div>` : ''}
       </div>
-      ${biggest && biggest.distance > 0 ? `<div class="card p-3 mb-3 text-sm">
-        <b>You two disagree most about:</b> ${esc(biggest.name)} — you ${tierLetterChip(labels, biggest.mine)}, ${esc(cmp.username)} ${tierLetterChip(labels, biggest.theirs)}
-      </div>` : '<div class="card p-3 mb-3 text-sm">You two agree on everything. Get more opinions.</div>'}
+      ${clashRows.length ? `<div class="card p-3 mb-3 text-sm">
+        <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Clashes · ${cmp.clash_threshold}+ tiers apart</div>
+        ${clashRows.map((r) => `<div class="flex items-center gap-2 py-1">
+          <span class="flex-1 truncate">${esc(r.name)}</span>
+          ${tierLetterChip(labels, r.mine)} <span class="text-[11px]" style="color:var(--ink-soft)">vs</span> ${tierLetterChip(labels, r.theirs)}
+        </div>`).join('')}
+      </div>` : cmp.shared && cmp.exact === cmp.shared
+        ? '<div class="card p-3 mb-3 text-sm">You two agree on everything. Get more opinions.</div>'
+        : cmp.shared ? `<div class="card p-3 mb-3 text-sm">No clashes — you're never more than ${cmp.clash_threshold === 1 ? 'the same tier' : (cmp.clash_threshold - 1) + ' tier' + (cmp.clash_threshold === 2 ? '' : 's')} apart.</div>` : ''}
       <div class="grid grid-cols-[1fr_auto_auto] gap-x-3 text-[13.5px]">
         <div></div><div class="text-[11px] font-bold pb-1" style="color:var(--ink-soft)">YOU</div><div class="text-[11px] font-bold pb-1" style="color:var(--ink-soft)">${esc(cmp.username.toUpperCase())}</div>
         ${cmp.items.map((r) => `
@@ -893,6 +928,9 @@
           <div class="py-1" style="border-bottom:1px solid var(--paper-deep)">${tierLetterChip(labels, r.mine)}</div>
           <div class="py-1" style="border-bottom:1px solid var(--paper-deep)">${tierLetterChip(labels, r.theirs)}</div>`).join('')}
       </div>
+      ${notCompared.length ? `<div class="text-[12.5px] mt-3" style="color:var(--ink-soft)">
+        <b>Not compared</b> — ${notCompared.join(' · ')}. These don't affect the percentage.
+      </div>` : ''}
     </main>`);
   }
 
@@ -1374,8 +1412,8 @@
     for (const it of data.items) byId[it.id] = it;
     const hot = stats && stats.hottest && byId[stats.hottest.item_id];
     const statLine = stats
-      ? `${stats.alignment}% aligned with ${agg.n} rankers${hot && stats.hottest.distance > 0 ? ` · hottest take: ${hot.name} in ${t.tier_labels[stats.hottest.mine - 1]}` : ''}`
-      : `${agg.n} rankings · Community Tier Lists`;
+      ? `${stats.alignment}% aligned with ${stats.others_n} other ranker${stats.others_n === 1 ? '' : 's'}${hot && stats.hottest.distance > 0 ? ` · hottest take: ${hot.name} in ${t.tier_labels[stats.hottest.mine - 1]}` : ''}`
+      : `${agg.n} ranking${agg.n === 1 ? '' : 's'} · Community Tier Lists`;
     const canvas = drawGridCanvas(
       t, data.items,
       (it) => agg.my && agg.my.placements ? agg.my.placements[it.id] : null,

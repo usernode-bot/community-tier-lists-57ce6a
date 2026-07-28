@@ -5,7 +5,8 @@
   "description": "Community Tier Lists",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test lib/*.test.js"
   },
   "dependencies": {
     "express": "^4.21.0",
