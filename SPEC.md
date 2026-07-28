@@ -253,14 +253,41 @@ without the `tier IS NOT NULL` filter.
   product spec's own definition ("evenly split across five tiers = most
   contested") is entropy, not spread-of-extremes. Displayed as "spread across
   N tiers"; template's *most contested* = max entropy with `placed_n ≥ 5`.
-- **Alignment %** = `round(100 − avgOverPlacedItems(|yourTier − communityTier|) × (100 / k))`,
-  clamped to [0,100], where k = tier count. For the default k=5 this is
-  exactly the product spec's ×20 constant, and it generalizes to custom
-  scales. Skipped items excluded.
-- **Your hottest take** = your placed item with max `|yourTier − communityTier|`;
+- **Alignment %** (`lib/score.js`, issue #14) — per-item **partial credit**,
+  averaged, never measured against a median that includes you:
+  - `tierCredit(d) = max(0, 1 − d / (k − 1))` where `d` is the tier distance.
+    The denominator is the real scale width, so identical = 1.0 and opposite
+    ends of the scale = 0.0 (the old `100/k` scaling floored a perfectly
+    inverted ranking at 20%).
+  - **You vs the community** is **leave-one-out**: your own vote is subtracted
+    from each item's distribution, and your credit for that item is the average
+    `tierCredit` against *every other ranker's* placement — not against a single
+    median tier. An item with no other placements is excluded; if that leaves
+    nothing, there is **no alignment %** at all (a solo ranker used to score a
+    mirror-image 100%). The community grid keeps its all-inclusive
+    `percentile_disc(0.5)` median — only the comparison basis changed, and at
+    small n the two can legitimately differ.
+  - **You vs a friend** is the same credit averaged over the items you both
+    placed. Skips and items only one side placed are excluded from the average
+    (skipping shouldn't cost you alignment) and reported separately as
+    "not compared".
+  - **100% is reserved for identical rankings and 0% for maximal opposition**;
+    everything else floors into [1,99]. A headline can never claim perfect
+    agreement while one compared item differs.
+  - **Clash** = a disagreement of at least half the scale width
+    (`ceil((k−1)/2)` — 2 tiers on the default k=5). Every alignment % is
+    rendered with a `N exact · N one tier off · N clashes` breakdown so the
+    disagreements behind the number are always visible. For a crowd, "exact"
+    means *every* other ranker matched you and "clash" means they average at
+    least half a scale away — bucketing a crowd off its median alone would
+    re-open issue #14, since a split crowd whose median tie-breaks onto your
+    tier is not agreement.
+- **Your hottest take** = your placed item with the **lowest crowd credit**;
   ties broken by higher `placed_n` (a contrarian take on a popular item beats
-  one on an obscure item). Contrarian percentile ("top 4%") = share of rankers
-  whose placement of that item is at least as far from the median as yours.
+  one on an obscure item), and omitted entirely when even the worst item matched
+  everyone. The community tier shown is the **leave-one-out** median, and the
+  contrarian percentile ("top 4%") = share of *other* rankers whose placement is
+  at least as far from that median as yours (your own vote never counts).
 - **Group aggregate** = same math filtered to member rankings. **Group vs
   global** compare is available on *public* templates for groups the viewer
   belongs to.

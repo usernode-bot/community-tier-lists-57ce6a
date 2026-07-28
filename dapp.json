@@ -19,6 +19,8 @@
     { "name": "Rank screen renders", "path": "/t/900001", "expectSelector": "[data-tier-row]" },
     { "name": "Partial-submit hint renders", "path": "/t/900001", "expectText": "Rank at least one item to submit" },
     { "name": "Results peek renders", "path": "/t/900001/results", "expectText": "rankings" },
+    { "name": "Divided-opinions results render", "path": "/t/900004/results", "expectText": "Staging demo" },
+    { "name": "Head-to-head gates on your own ranking", "path": "/t/900004/compare/staging-demo-user-1", "expectText": "Submit your own ranking first", "allowConsoleErrors": true },
     { "name": "Inline comments render on results", "path": "/t/900001/results", "expectText": "Staging demo comment" },
     { "name": "Comment composer renders styled", "path": "/t/900001/results", "expectText": "ADD A COMMENT" },
     { "name": "Create screen renders", "path": "/new", "expectText": "Tier scale" },

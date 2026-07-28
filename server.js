@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const { pool, migrate, bumpSequences } = require('./lib/db');
 const { canonicalKey } = require('./lib/canonical');
 const { getAggregate, invalidate, revealStats, myPlacements } = require('./lib/aggregate');
+const { pairScore } = require('./lib/score');
 const { seedProduction } = require('./seeds/templates');
 const { seedStaging } = require('./seeds/staging');
 
@@ -532,22 +533,54 @@ app.get('/api/templates/:id/compare/:username', wrap(async (req, res) => {
   const names = {};
   for (const it of await activeItems(t.id, req.user.id)) names[it.id] = it.name;
 
-  const rows = [];
-  let sum = 0, count = 0;
-  for (const [itemId, mineT] of Object.entries(mine)) {
-    const theirT = theirMap[itemId];
-    if (mineT == null || theirT == null || !names[itemId]) continue;
-    const d = Math.abs(mineT - theirT);
-    rows.push({ item_id: itemId, name: names[itemId], mine: mineT, theirs: theirT, distance: d });
-    sum += d;
-    count++;
+  // Placements on items that are no longer in the shared set (hidden by
+  // moderation, or a proposal that was rejected/removed) used to vanish from
+  // both the table and the denominator with no signal. Name them so the UI can
+  // account for them instead (issue #14).
+  const comparableMine = {}, comparableTheirs = {};
+  const unavailableIds = new Set();
+  for (const itemId of new Set([...Object.keys(mine), ...Object.keys(theirMap)])) {
+    if (!names[itemId]) {
+      if (mine[itemId] != null || theirMap[itemId] != null) unavailableIds.add(itemId);
+      continue;
+    }
+    if (itemId in mine) comparableMine[itemId] = mine[itemId];
+    if (itemId in theirMap) comparableTheirs[itemId] = theirMap[itemId];
   }
-  rows.sort((a, b) => b.distance - a.distance);
-  const alignment = count
-    ? Math.max(0, Math.min(100, Math.round(100 - (sum / count) * (100 / k)))) : null;
+
+  const score = pairScore(comparableMine, comparableTheirs, k);
+  const items = score.rows.map((r) => ({ ...r, name: names[r.item_id] }));
+
+  // Items only one of us placed: excluded from the % (skipping shouldn't cost
+  // you alignment), but listed so the number is auditable.
+  const onlyMine = [], onlyTheirs = [];
+  for (const [itemId, tier] of Object.entries(comparableMine)) {
+    if (tier != null && comparableTheirs[itemId] == null) {
+      onlyMine.push({ item_id: itemId, name: names[itemId], tier });
+    }
+  }
+  for (const [itemId, tier] of Object.entries(comparableTheirs)) {
+    if (tier != null && comparableMine[itemId] == null) {
+      onlyTheirs.push({ item_id: itemId, name: names[itemId], tier });
+    }
+  }
+
+  let unavailable = [];
+  if (unavailableIds.size) {
+    unavailable = (await pool.query(
+      'SELECT id::text AS item_id, name FROM template_items WHERE id = ANY($1)',
+      [[...unavailableIds]])).rows;
+  }
+
+  const union = score.compared + onlyMine.length + onlyTheirs.length;
   res.json({
     username: theirName, tier_labels: t.tier_labels, title: t.title,
-    alignment, shared: count, items: rows,
+    alignment: score.alignment, shared: score.compared,
+    exact: score.exact, near: score.near, clashes: score.clashes,
+    clash_threshold: score.clash_threshold,
+    coverage_thin: score.compared > 0 && (score.compared < 3 || score.compared / union < 0.5),
+    items, only_mine: onlyMine, only_theirs: onlyTheirs,
+    unavailable,
   });
 }));
 
@@ -927,11 +960,12 @@ app.get('/api/me', wrap(async (req, res) => {
   let sum = 0, cnt = 0, hottest = null;
   for (const r of recent) {
     const agg = await getAggregate(r.template_id, r.tier_labels.length);
-    if (agg.n < 2) continue; // a solo ranking aligns 100% with itself — skip
     const mine = await myPlacements(r.template_id, me.id);
     if (!mine) continue;
+    // Leave-one-out scoring returns null when nobody else has placed anything
+    // on this list, so solo rankings drop out here without a special case.
     const stats = revealStats(mine, agg);
-    if (!stats) continue;
+    if (!stats || stats.alignment == null) continue;
     sum += stats.alignment;
     cnt++;
     if (stats.hottest && stats.hottest.distance > 0 &&
