@@ -7,7 +7,7 @@ const { pool, migrate, bumpSequences } = require('./lib/db');
 const { canonicalKey } = require('./lib/canonical');
 const { getAggregate, invalidate, revealStats, myPlacements } = require('./lib/aggregate');
 const { pairScore } = require('./lib/score');
-const { seedProduction } = require('./seeds/templates');
+const { seedProduction, ensureTodaysEdition } = require('./seeds/templates');
 const { seedStaging } = require('./seeds/staging');
 
 const app = express();
@@ -147,8 +147,25 @@ function parseJsonBlock(text, open, close) {
 
 // ---------- Home ----------
 
+// A container that stays up across midnight would otherwise serve a Home with
+// no edition until the next deploy, so Home tops the calendar up itself. The
+// date guard keeps this to one extra query per process per day.
+let dailyCheckedOn = null;
+async function ensureTodaysEditionOncePerDay() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (dailyCheckedOn === today) return;
+  try {
+    await ensureTodaysEdition(pool);
+    dailyCheckedOn = today;
+  } catch (err) {
+    // Home still renders without a hero; don't fail the whole payload.
+    console.error('ensureTodaysEdition failed', err.message);
+  }
+}
+
 app.get('/api/home', wrap(async (req, res) => {
   const me = req.user;
+  await ensureTodaysEditionOncePerDay();
 
   const todayQ = await pool.query(
     `SELECT d.edition_no, t.id::text AS template_id, t.title, t.tier_labels,
@@ -241,8 +258,14 @@ app.get('/api/templates/:id', wrap(async (req, res) => {
       `SELECT id::text, name, added_by_username FROM template_items
        WHERE template_id = $1 AND status = 'proposed' AND NOT hidden ORDER BY created_at`, [t.id])).rows;
   }
+  // Rotation means a template can hold several editions, so prefer today's,
+  // then the nearest past one, then the nearest scheduled one.
   const daily = (await pool.query(
-    'SELECT edition_no, run_date, run_date < CURRENT_DATE AS is_final FROM daily_lists WHERE template_id = $1',
+    `SELECT edition_no, run_date, run_date < CURRENT_DATE AS is_final
+       FROM daily_lists WHERE template_id = $1
+      ORDER BY (run_date = CURRENT_DATE) DESC, (run_date < CURRENT_DATE) DESC,
+               abs(run_date - CURRENT_DATE) ASC
+      LIMIT 1`,
     [t.id])).rows[0] || null;
   res.json({
     template: {
@@ -1029,6 +1052,7 @@ app.get('*', (req, res) => {
 async function start() {
   await migrate();
   await seedProduction(pool);
+  await ensureTodaysEdition(pool);
   if (IS_STAGING) await seedStaging(pool);
   await bumpSequences();
   app.listen(port, () => console.log(`Listening on :${port}`));

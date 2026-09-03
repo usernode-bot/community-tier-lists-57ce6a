@@ -59,7 +59,8 @@ const SEEDS = [
     'Peanut Butter Jelly Time', 'LOLcats', 'Charlie the Unicorn',
     'Salad Fingers', 'Chuck Norris Facts', 'Hamster Dance',
     'Double Rainbow', 'David After Dentist'] },
-  // Feed-only seeds (not Today's List editions)
+  // Not part of the initial 10-edition calendar, but eligible for the
+  // rotation once that runs out (see ensureTodaysEdition below).
   { id: 11, title: 'Breakfast cereals, definitively', category: 'Food', emoji: '🥣', items: [
     'Frosted Flakes', 'Cheerios', 'Froot Loops', 'Lucky Charms',
     'Cinnamon Toast Crunch', 'Cocoa Puffs', 'Corn Flakes', 'Rice Krispies',
@@ -115,4 +116,37 @@ async function seedProduction(pool) {
   );
 }
 
-module.exports = { seedProduction };
+// The calendar above only covers the first DAILY_EDITIONS days. Without this
+// it simply runs out: `run_date = CURRENT_DATE` stops matching, the hero
+// vanishes from Home and /today dead-ends. So every boot (and once per day per
+// process, from /api/home) we make sure today has an edition, rotating through
+// the seed lists least-recently-featured first. Deliberately NOT staging-only:
+// an expired calendar is a production bug, and staging inherits the fix.
+async function ensureTodaysEdition(pool) {
+  const { rows } = await pool.query(
+    'SELECT 1 FROM daily_lists WHERE run_date = CURRENT_DATE');
+  if (rows.length) return;
+
+  // Missed days are not back-filled: nobody could have ranked them, and a
+  // fabricated archive would read as a real edition. Today just takes the
+  // next edition number.
+  await pool.query(
+    `INSERT INTO daily_lists (edition_no, template_id, run_date)
+     SELECT (SELECT COALESCE(MAX(edition_no), 0) + 1 FROM daily_lists),
+            t.id, CURRENT_DATE
+       FROM templates t
+       LEFT JOIN LATERAL (
+         SELECT MAX(d.run_date) AS last_run FROM daily_lists d
+          WHERE d.template_id = t.id
+       ) prev ON true
+      WHERE t.is_seed AND t.visibility = 'public' AND NOT t.hidden
+        AND t.group_id IS NULL
+        AND EXISTS (SELECT 1 FROM template_items i
+                     WHERE i.template_id = t.id
+                       AND i.status = 'active' AND NOT i.hidden)
+      ORDER BY prev.last_run ASC NULLS FIRST, t.id ASC
+      LIMIT 1
+     ON CONFLICT DO NOTHING`);
+}
+
+module.exports = { seedProduction, ensureTodaysEdition };
