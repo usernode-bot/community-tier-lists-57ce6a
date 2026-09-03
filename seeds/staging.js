@@ -38,6 +38,19 @@ const DIVIDED_ITEMS = [
   { id: 900406, name: 'Well-done steak', emoji: '🥩', tiers: [3, 2] },
 ];
 
+// Narrow-screen fixture: a title far wider than a phone header, plus one
+// unbreakable word so word-breaking (not just wrapping) is exercised.
+const LONG_TITLE = 'Staging demo: the extraordinarily long tier list title that '
+  + 'absolutely refuses to fit on a narrow phone screen without wrapping '
+  + 'Supercalifragilisticexpialidocious';
+
+const LONG_ITEMS = [
+  'An item name that is itself much too long to sit on one line of a chip',
+  'Pneumonoultramicroscopicsilicovolcanoconiosis',
+  'Short one',
+  'Another fairly wordy contender for the top tier of this ridiculous list',
+];
+
 async function seedStaging(pool) {
   const u = DEMO_USERS;
 
@@ -175,6 +188,23 @@ async function seedStaging(pool) {
         [900009 + r, it.id, it.tiers[r]]
       );
     }
+  }
+
+  // --- Demo template 5: deliberately long title + long item names ---
+  // The fixture for narrow-screen title handling: the header, the feed row
+  // and the board chips all have to wrap rather than clip at 390px wide.
+  await pool.query(
+    `INSERT INTO templates (id, title, category, author_id, author_username, visibility, item_policy)
+     VALUES (900005, $3, 'Meta', $1, $2, 'public', 'open')
+     ON CONFLICT (id) DO NOTHING`,
+    [u[0].id, u[0].username, LONG_TITLE]
+  );
+  for (let i = 0; i < LONG_ITEMS.length; i++) {
+    await pool.query(
+      `INSERT INTO template_items (id, template_id, name, canonical_key)
+       VALUES ($1, 900005, $2, $3) ON CONFLICT (id) DO NOTHING`,
+      [900501 + i, LONG_ITEMS[i], LONG_ITEMS[i].toLowerCase().replace(/[^a-z0-9]+/g, '-')]
+    );
   }
 
   // --- Comments (template-level and item-anchored, so the inline thread

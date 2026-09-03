@@ -129,14 +129,21 @@
 
   function header(title, opts = {}) {
     const back = opts.back === false ? '' :
-      `<button data-nav="${esc(opts.back || '/')}" class="un-touch-target text-xl font-bold px-1" style="color:var(--link)" aria-label="Back">←</button>`;
+      `<button data-nav="${esc(opts.back || '/')}" class="un-touch-target text-xl font-bold px-1 shrink-0" style="color:var(--link)" aria-label="Back">←</button>`;
     return `<header class="sticky top-0 z-20 un-safe-top" style="background:var(--header-bg);backdrop-filter:blur(8px);border-bottom:2px solid var(--header-rule)">
-      <div class="max-w-xl mx-auto flex items-center gap-2 px-3 h-12">
+      <div class="max-w-xl mx-auto flex items-center gap-2 px-3 py-2 min-h-[3rem]">
         ${back}
-        <div class="font-display font-black text-[17px] truncate">${title}</div>
-        <div class="ml-auto flex items-center gap-1">${opts.actions || ''}</div>
+        <h1 class="screen-title clamp-2 flex-1 min-w-0 font-display font-black">${title}</h1>
+        <div class="flex items-center gap-1 shrink-0">${opts.actions || ''}</div>
       </div>
     </header>`;
+  }
+
+  // The sticky header clamps to two lines so it can't eat the viewport; the
+  // board and results screens repeat the title here so a long one is still
+  // readable in full on a phone.
+  function pageTitle(title) {
+    return `<h2 class="font-display font-black page-title wrap-anywhere mb-2">${esc(title)}</h2>`;
   }
 
   function screen(html) {
@@ -234,7 +241,7 @@
       const dest = h.today.my_status === 'submitted' ? `/t/${h.today.template_id}/results` : `/t/${h.today.template_id}`;
       hero = `<section class="card p-4 mb-4" style="background:var(--hero-grad);border-color:var(--card-line-hover)">
         <div class="text-[11px] font-bold uppercase tracking-widest" style="color:var(--accent)">Today's List · No. ${h.today.edition_no}</div>
-        <div class="font-display font-black text-2xl mt-1">${esc(h.today.title)}</div>
+        <div class="font-display font-black hero-title wrap-anywhere mt-1">${esc(h.today.title)}</div>
         <div class="text-sm mt-1" style="color:var(--ink-soft)">${h.today.n} ranked so far${h.today.my_status === 'submitted' ? ' · yours is in ✓' : ''}</div>
         <button data-nav="${dest}" class="btn-primary mt-3">${cta}</button>
       </section>`;
@@ -248,7 +255,7 @@
     const inprog = h.in_progress.length ? `<section class="mb-4">
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">In progress</div>
       ${h.in_progress.map((r) => `<button data-nav="/t/${r.template_id}" class="card card-tap w-full text-left px-3 py-2 mb-1 text-sm un-pressable flex items-center gap-2">
-        <span class="flex-1 min-w-0"><b>${esc(r.title)}</b> — ${r.placed} of ${r.total} placed · <span style="color:var(--accent)">resume</span></span>${CHEV}</button>`).join('')}
+        <span class="flex-1 min-w-0 wrap-anywhere"><b>${esc(r.title)}</b> — ${r.placed} of ${r.total} placed · <span style="color:var(--accent)">resume</span></span>${CHEV}</button>`).join('')}
     </section>` : '';
 
     const groups = `<section class="mb-4">
@@ -257,7 +264,7 @@
         <button id="new-group" class="ml-auto text-[12px] font-bold" style="color:var(--accent)">+ new group</button>
       </div>
       ${h.groups.length ? h.groups.map((g) => `<button data-nav="/g/${g.id}" class="card card-tap w-full text-left px-3 py-2 mb-1 text-sm un-pressable flex items-center gap-2">
-        <span class="flex-1 min-w-0"><b>${esc(g.name)}</b> · ${g.member_count} member${g.member_count === 1 ? '' : 's'}${g.recent ? ` · <span style="color:var(--accent)">${g.recent} new ranking${g.recent === 1 ? '' : 's'}</span>` : ''}</span>${CHEV}</button>`).join('')
+        <span class="flex-1 min-w-0 wrap-anywhere"><b>${esc(g.name)}</b> · ${g.member_count} member${g.member_count === 1 ? '' : 's'}${g.recent ? ` · <span style="color:var(--accent)">${g.recent} new ranking${g.recent === 1 ? '' : 's'}</span>` : ''}</span>${CHEV}</button>`).join('')
       : '<div class="card px-3 py-3 text-sm" style="color:var(--ink-soft)">Run private lists with friends — restaurants, crags, whatever you argue about.</div>'}
     </section>`;
 
@@ -265,12 +272,12 @@
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Feed · trending &amp; recent</div>
       ${h.feed.map((t) => `<button data-nav="${templateDest(t.id, t.my_status)}" class="card card-tap w-full text-left px-3 py-2 mb-1 un-pressable flex items-center gap-2">
         <span class="flex-1 min-w-0 block">
-          <span class="block text-sm font-bold truncate">${t.recent_n >= 3 ? '🔥 ' : ''}${esc(t.title)}</span>
-          <span class="block text-[12px] truncate" style="color:var(--ink-soft)">${t.n} ranking${t.n === 1 ? '' : 's'}${t.category ? ' · ' + esc(t.category) : ''} · by ${esc(t.author_username)}</span>
+          <span class="font-bold row-title clamp-2">${t.recent_n >= 3 ? '🔥 ' : ''}${esc(t.title)}</span>
+          <span class="block text-[12px] mt-0.5 truncate" style="color:var(--ink-soft)">${t.n} ranking${t.n === 1 ? '' : 's'}${t.category ? ' · ' + esc(t.category) : ''} · by ${esc(t.author_username)}</span>
         </span>${statusPill(t.my_status)}${CHEV}
       </button>`).join('') || '<div class="card px-3 py-3 text-sm" style="color:var(--ink-soft)">Nothing here yet — create the first list!</div>'}
       ${h.recent_rankings.map((r) => `<button data-nav="${templateDest(r.template_id, r.my_status)}" class="w-full text-left px-3 py-1.5 text-[12.5px] un-pressable flex items-center gap-2" style="color:var(--ink-soft)">
-        <span class="flex-1 min-w-0 truncate"><b>${esc(r.username)}</b> ranked “${esc(r.title)}”</span>${CHEV}</button>`).join('')}
+        <span class="flex-1 min-w-0 clamp-2"><b>${esc(r.username)}</b> ranked “${esc(r.title)}”</span>${CHEV}</button>`).join('')}
     </section>`;
 
     screen(`${header(`Tier Lists ${stagingPill}`, {
@@ -350,7 +357,7 @@
     const submitted = data.my.status === 'submitted';
 
     const placer = sel && byId[sel] ? `<div class="card p-3 mt-2" id="placer">
-      <div class="text-[12px] font-bold mb-2">Place “${esc(byId[sel].name)}”</div>
+      <div class="text-[12px] font-bold mb-2 wrap-anywhere">Place “${esc(byId[sel].name)}”</div>
       <div class="flex flex-wrap gap-2">
         ${labels.map((l, i) => `<button class="tier-label un-pressable" data-place="${i + 1}" style="background:${tierColor(i)};min-height:44px">${esc(l)}</button>`).join('')}
         <button data-place="skip" class="un-pressable px-3 rounded-[10px] border font-bold text-sm" style="border-color:var(--line);min-height:44px">Skip — haven't seen it</button>
@@ -364,6 +371,7 @@
     })}
     <main class="max-w-xl mx-auto p-4 pb-10 un-safe-bottom">
       ${data.daily ? `<div class="text-[11px] font-bold uppercase tracking-widest mb-2" style="color:var(--accent)">Today's List · No. ${data.daily.edition_no}${data.daily.is_final ? ' · final' : ''}</div>` : ''}
+      ${pageTitle(t.title)}
       <div class="text-[13px] mb-3" style="color:var(--ink-soft)">
         ${submitted ? 'You’ve ranked this — edits update the community aggregate live.' :
           `Aggregate hidden until you rank — ${placedCount} of ${items.length} placed${skipped.length ? `, ${skipped.length} skipped` : ''}.`}
@@ -385,7 +393,7 @@
       ${data.proposals && data.proposals.length ? `<div class="card p-3 mt-3">
         <div class="text-[12px] font-bold mb-2">Proposed items (you're the author)</div>
         ${data.proposals.map((p) => `<div class="flex items-center gap-2 text-sm py-1">
-          <span class="flex-1">${esc(p.name)} <span style="color:var(--ink-soft)">by ${esc(p.added_by_username || '?')}</span></span>
+          <span class="flex-1 min-w-0 wrap-anywhere">${esc(p.name)} <span style="color:var(--ink-soft)">by ${esc(p.added_by_username || '?')}</span></span>
           <button data-decide="${p.id}:1" class="font-bold text-[12px]" style="color:var(--ok-fg)">approve</button>
           <button data-decide="${p.id}:0" class="font-bold text-[12px]" style="color:var(--danger-fg)">reject</button>
         </div>`).join('')}
@@ -659,6 +667,7 @@
     screen(`${header(esc(t.title), { back: '/' })}
     <main class="max-w-xl mx-auto p-4 pb-10 un-safe-bottom">
       ${data.daily ? `<div class="text-[11px] font-bold uppercase tracking-widest mb-2" style="color:var(--accent)">Today's List · No. ${data.daily.edition_no}${data.daily.is_final ? ' · final verdict' : ' · live'}</div>` : ''}
+      ${pageTitle(t.title)}
       ${revealHtml}
       ${contestedHtml}
       <div class="flex items-baseline gap-2 mt-4 mb-2">
@@ -769,7 +778,7 @@
         <div class="text-[12.5px] mb-3" style="color:var(--ink-soft)">group medians (${g.n} member rankings) vs the global grid (${globalAgg.n})</div>
         ${top && Math.abs(top.gm - top.wm) > 0 ? `<div class="card p-3 mb-3 text-sm"><b>Biggest divergence</b> — ${esc(top.it.name)}: group says ${tierLetterChip(labels, top.gm)}, the world says ${tierLetterChip(labels, top.wm)}</div>` : '<div class="text-sm mb-3">Your group agrees with the world. Boring but harmonious.</div>'}
         ${diffs.map((d) => `<div class="flex items-center gap-2 text-[13.5px] py-1" style="border-bottom:1px solid var(--paper-deep)">
-          <span class="flex-1 truncate">${esc(d.it.name)}</span>
+          <span class="flex-1 min-w-0 wrap-anywhere">${esc(d.it.name)}</span>
           ${tierLetterChip(labels, d.gm)} <span class="text-[11px]" style="color:var(--ink-soft)">vs</span> ${tierLetterChip(labels, d.wm)}
         </div>`).join('')}
       `);
@@ -915,7 +924,7 @@
       ${clashRows.length ? `<div class="card p-3 mb-3 text-sm">
         <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Clashes · ${cmp.clash_threshold}+ tiers apart</div>
         ${clashRows.map((r) => `<div class="flex items-center gap-2 py-1">
-          <span class="flex-1 truncate">${esc(r.name)}</span>
+          <span class="flex-1 min-w-0 wrap-anywhere">${esc(r.name)}</span>
           ${tierLetterChip(labels, r.mine)} <span class="text-[11px]" style="color:var(--ink-soft)">vs</span> ${tierLetterChip(labels, r.theirs)}
         </div>`).join('')}
       </div>` : cmp.shared && cmp.exact === cmp.shared
@@ -924,7 +933,7 @@
       <div class="grid grid-cols-[1fr_auto_auto] gap-x-3 text-[13.5px]">
         <div></div><div class="text-[11px] font-bold pb-1" style="color:var(--ink-soft)">YOU</div><div class="text-[11px] font-bold pb-1" style="color:var(--ink-soft)">${esc(cmp.username.toUpperCase())}</div>
         ${cmp.items.map((r) => `
-          <div class="py-1 truncate" style="border-bottom:1px solid var(--paper-deep)">${esc(r.name)}</div>
+          <div class="py-1 wrap-anywhere" style="border-bottom:1px solid var(--paper-deep)">${esc(r.name)}</div>
           <div class="py-1" style="border-bottom:1px solid var(--paper-deep)">${tierLetterChip(labels, r.mine)}</div>
           <div class="py-1" style="border-bottom:1px solid var(--paper-deep)">${tierLetterChip(labels, r.theirs)}</div>`).join('')}
       </div>
@@ -1132,8 +1141,8 @@
       ${d.templates.map((t) => `<div class="card p-3 mb-2">
         <button data-nav="${templateDest(t.id, t.mine_in ? 'submitted' : null)}" class="w-full text-left un-pressable flex items-center gap-2">
           <span class="flex-1 min-w-0 block">
-            <span class="block font-bold text-[15px]">${esc(t.title)}</span>
-            <span class="block text-[12.5px]" style="color:var(--ink-soft)">${t.n} of ${d.members.length} ranked${t.mine_in ? ' · your ranking is in ✓' : ' · <b style="color:var(--tint-accent-fg)">rank it</b>'}</span>
+            <span class="font-bold row-title clamp-2">${esc(t.title)}</span>
+            <span class="block text-[12.5px] mt-0.5 wrap-anywhere" style="color:var(--ink-soft)">${t.n} of ${d.members.length} ranked${t.mine_in ? ' · your ranking is in ✓' : ' · <b style="color:var(--tint-accent-fg)">rank it</b>'}</span>
           </span>${CHEV}
         </button>
         ${t.biggest_split ? `<div class="text-[12.5px] mt-1 pt-1" style="border-top:1px solid var(--paper-deep);color:var(--ink-soft)">
@@ -1230,7 +1239,7 @@
     const m = await api('/api/me');
     screen(`${header('Profile', { back: '/' })}
     <main class="max-w-xl mx-auto p-4 pb-10 un-safe-bottom">
-      <div class="font-display font-black text-2xl mb-3">${esc(m.username)}</div>
+      <div class="font-display font-black hero-title wrap-anywhere mb-3">${esc(m.username)}</div>
       <div class="grid grid-cols-3 gap-2 mb-3">
         <div class="card p-3 text-center"><div class="font-display font-black text-2xl">🔥 ${m.streak}</div><div class="text-[11px]" style="color:var(--ink-soft)">Today's List streak</div></div>
         <div class="card p-3 text-center"><div class="font-display font-black text-2xl">${m.ranked_count}</div><div class="text-[11px]" style="color:var(--ink-soft)">lists ranked</div></div>
@@ -1243,7 +1252,7 @@
       ${themeSectionHtml()}
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">My templates</div>
       ${m.my_templates.map((t) => `<button data-nav="/t/${t.id}/results" class="card card-tap w-full text-left px-3 py-2 mb-1 text-sm un-pressable flex items-center gap-2">
-        <span class="flex-1 min-w-0"><b>${esc(t.title)}</b> — ${t.n} ranking${t.n === 1 ? '' : 's'}${t.visibility === 'group' ? ' · group' : ''}${t.hidden ? ' · <b style="color:var(--danger-fg)">hidden</b>' : ''}</span>${CHEV}
+        <span class="flex-1 min-w-0 wrap-anywhere"><b>${esc(t.title)}</b> — ${t.n} ranking${t.n === 1 ? '' : 's'}${t.visibility === 'group' ? ' · group' : ''}${t.hidden ? ' · <b style="color:var(--danger-fg)">hidden</b>' : ''}</span>${CHEV}
       </button>`).join('') || '<div class="card px-3 py-3 text-sm mb-1" style="color:var(--ink-soft)">None yet — make one, it takes a minute.</div>'}
       <button data-nav="/new" class="btn-primary mt-2 mb-4">CREATE A TEMPLATE</button>
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">This week Tier Lists changed because you voted</div>
@@ -1276,7 +1285,7 @@
       <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Report queue (${d.queue.length})</div>
       ${d.queue.map((q) => `<div class="card p-3 mb-2 text-sm">
         <div><span class="badge" style="background:var(--tint-neutral-bg);color:var(--tint-neutral-fg)">${q.content_type}</span> ${q.hidden ? '<span class="badge" style="background:var(--tint-danger-bg);color:var(--tint-danger-fg)">hidden</span>' : ''}
-          <b>${esc(q.preview || '(deleted)')}</b></div>
+          <b class="wrap-anywhere">${esc(q.preview || '(deleted)')}</b></div>
         <div class="text-[12px] mt-1" style="color:var(--ink-soft)">${q.report_count} report${q.report_count === 1 ? '' : 's'} · ${q.reporters.map(esc).join(', ')}${q.reasons.length ? ' · “' + esc(q.reasons[0]) + '”' : ''}</div>
         <div class="flex gap-2 mt-2">
           ${q.template_id ? `<button data-nav="/t/${q.template_id}/results" class="text-[12px] font-bold" style="color:var(--accent)">view</button>` : ''}

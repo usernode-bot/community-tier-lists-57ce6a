@@ -238,7 +238,36 @@
       --un-hairline: #2E3342;
     }
     body { background: var(--paper); color: var(--ink); font-family: Inter, system-ui, sans-serif; }
+    /* Nothing in this app is allowed to push the page sideways on a phone.
+       `clip` (not `hidden`) so the value propagates to the viewport without
+       turning <body> into a scroll container, which would break the sticky
+       header. */
+    body { overflow-x: clip; }
     .font-display { font-family: Fraunces, Georgia, serif; }
+
+    /* ---- Titles on narrow screens ----
+       Long list titles used to be `truncate`d to one clipped line on a phone.
+       They now wrap to two lines, break mid-word only when a single word is
+       genuinely wider than the column, and shrink with the viewport. */
+    .wrap-anywhere { overflow-wrap: anywhere; word-break: break-word; min-width: 0; }
+    .clamp-2 {
+      -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+      overflow: hidden; overflow-wrap: anywhere; min-width: 0;
+    }
+    /* Doubled class on purpose: the Tailwind CDN injects its utilities after
+       this <style>, so a plain `.clamp-2 { display }` loses to `block` /
+       `flex` on the same element and the clamp silently stops working. */
+    .clamp-2.clamp-2 { display: -webkit-box; }
+    /* Sticky header title: 14.5px on a 320px phone, 17px from ~425px up. */
+    .screen-title { font-size: clamp(14.5px, 4vw, 17px); line-height: 1.2; }
+    /* Today's List hero. */
+    .hero-title { font-size: clamp(20px, 6.2vw, 30px); line-height: 1.15; }
+    /* Row titles in the feed / group / browse lists. */
+    .row-title { font-size: clamp(13.5px, 3.7vw, 15px); line-height: 1.25; }
+    /* In-content page title. The sticky header stays bounded at two lines,
+       so the board and results screens repeat the title here in full — a
+       title longer than two header lines is still readable. */
+    .page-title { font-size: clamp(19px, 5.6vw, 26px); line-height: 1.18; }
     .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
     .card-tap { transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease; }
     @media (hover: hover) {
@@ -255,6 +284,8 @@
       padding: 6px 10px; font-size: 13px; font-weight: 600; color: var(--ink);
       min-height: 34px; touch-action: none; user-select: none; -webkit-user-select: none;
       cursor: grab; max-width: 100%;
+      /* A long item name wraps inside the chip rather than widening the row. */
+      white-space: normal; overflow-wrap: anywhere; text-align: left;
     }
     .chip img { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; }
     .chip.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -271,7 +302,7 @@
       text-align: center; padding: 2px; word-break: break-word; line-height: 1.05;
     }
     .tier-items {
-      flex: 1; background: var(--paper-deep); border: 1.5px dashed var(--drop-line); border-radius: 10px;
+      flex: 1; min-width: 0; background: var(--paper-deep); border: 1.5px dashed var(--drop-line); border-radius: 10px;
       padding: 6px; display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; min-height: 52px;
     }
     .tier-items.drop-target { border-color: var(--accent); background: var(--drop-active-bg); }

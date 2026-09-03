@@ -24,6 +24,9 @@
     { "name": "Inline comments render on results", "path": "/t/900001/results", "expectText": "Staging demo comment" },
     { "name": "Comment composer renders styled", "path": "/t/900001/results", "expectText": "ADD A COMMENT" },
     { "name": "Create screen renders", "path": "/new", "expectText": "Tier scale" },
+    { "name": "Board title wraps instead of clipping", "path": "/t/900005", "expectSelector": "h1.screen-title.clamp-2" },
+    { "name": "Board renders the full long title", "path": "/t/900005", "expectText": "Supercalifragilisticexpialidocious" },
+    { "name": "Selection list titles wrap", "path": "/", "expectSelector": ".row-title.clamp-2" },
     { "name": "Theme control renders", "path": "/me", "expectSelector": "[data-theme-mode='system']" },
     { "name": "Dark deep link applies", "path": "/?theme=dark", "expectSelector": "html.dark" },
     { "name": "Home renders in dark", "path": "/?theme=dark", "expectText": "Today's List" }
