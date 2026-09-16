@@ -217,6 +217,20 @@ async function seedStaging(pool) {
      ON CONFLICT (id) DO NOTHING`
   );
 
+  // --- Today's List for today ---
+  // The launch calendar (seeds/templates.js) dates editions 1..10 from the
+  // first production boot and staging clones that data, so once those ten
+  // days passed there was no edition for CURRENT_DATE and the home card
+  // (which the "Home renders" checks look for) never rendered. Add one on
+  // the demo template when today has none.
+  await pool.query(
+    `INSERT INTO daily_lists (edition_no, template_id, run_date)
+     SELECT last.n + 1, 900001, CURRENT_DATE
+     FROM (SELECT COALESCE(MAX(edition_no), 0) AS n FROM daily_lists) last
+     WHERE NOT EXISTS (SELECT 1 FROM daily_lists WHERE run_date = CURRENT_DATE)
+     ON CONFLICT DO NOTHING`
+  );
+
   // --- What's-changing strip entry ---
   await pool.query(
     `INSERT INTO changelog_entries (id, kind, title, body)
