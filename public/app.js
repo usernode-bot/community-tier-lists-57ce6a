@@ -651,6 +651,37 @@
     const noDataHtml = noData.length ? `<div class="text-[12.5px] mt-2" style="color:var(--ink-soft)">
       Not enough data yet: ${noData.map((it) => esc(it.name)).join(' · ')}</div>` : '';
 
+    // "You vs community": your placement next to the crowd's median for every
+    // item, biggest gap first. Gated on having a submitted ranking with at
+    // least one placement — stats can still be null for a first/solo ranker
+    // (issue #14), so it must not gate this. A skipped item keeps the skip
+    // chip; a missing community median gets a neutral "—" placeholder.
+    let youVsCommunityHtml = '';
+    if (mineSubmitted && agg.my && Object.keys(agg.my.placements).length > 0) {
+      const rows = data.items.map((it) => {
+        const mine = agg.my.placements[it.id];
+        const community = agg.items[it.id] ? agg.items[it.id].median : null;
+        return { it, mine, community,
+          gap: mine != null && community != null ? Math.abs(mine - community) : null };
+      }).sort((a, b) => {
+        if (a.gap == null && b.gap == null) return 0;
+        if (a.gap == null) return 1;
+        if (b.gap == null) return -1;
+        return b.gap - a.gap;
+      });
+      const placeholderChip = '<span class="badge" style="background:var(--tint-neutral-bg);color:var(--tint-neutral-fg)">—</span>';
+      youVsCommunityHtml = `<div class="mt-4">
+        <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">You vs community</div>
+        <div class="grid grid-cols-[1fr_auto_auto] gap-x-3 text-[13.5px]">
+          <div></div><div class="text-[11px] font-bold pb-1" style="color:var(--ink-soft)">YOU</div><div class="text-[11px] font-bold pb-1" style="color:var(--ink-soft)">COMMUNITY</div>
+          ${rows.map((r) => `
+            <div class="py-1 truncate" style="border-bottom:1px solid var(--paper-deep)">${r.it.emoji ? esc(r.it.emoji) + ' ' : ''}${esc(r.it.name)}</div>
+            <div class="py-1" style="border-bottom:1px solid var(--paper-deep)">${tierLetterChip(labels, r.mine)}</div>
+            <div class="py-1" style="border-bottom:1px solid var(--paper-deep)">${r.community == null ? placeholderChip : tierLetterChip(labels, r.community)}</div>`).join('')}
+        </div>
+      </div>`;
+    }
+
     const groupBtns = (await getHome()).groups.map((g) =>
       `<button data-groupcmp="${g.id}" class="card px-3 py-2 text-[12.5px] font-bold un-pressable">${esc(g.name)} vs the world</button>`).join('');
 
@@ -667,6 +698,7 @@
       </div>
       ${gridRows}
       ${noDataHtml}
+      ${youVsCommunityHtml}
       ${mineSubmitted ? `<div class="grid grid-cols-2 gap-2 mt-4">
         <button id="share-grid" class="btn-primary" style="width:auto">SHARE MY GRID<span class="block text-[10px] font-semibold opacity-75">your full grid</span></button>
         <button id="share-take" class="btn-primary" style="width:auto" ${hasHotTake ? '' : 'disabled'}>SHARE MY TAKE<span class="block text-[10px] font-semibold opacity-75">your hottest take</span></button>
