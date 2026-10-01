@@ -157,8 +157,8 @@
       </main>`);
   }
 
-  function loading(title) {
-    screen(`${header(title || 'Tier Lists')}<main class="max-w-xl mx-auto p-4"><div class="p-10 text-center" style="color:var(--ink-soft)">Loading…</div></main>`);
+  function loading(title, hint) {
+    screen(`${header(title || 'Tier Lists')}<main class="max-w-xl mx-auto p-4"><div class="p-10 text-center" style="color:var(--ink-soft)">Loading…</div>${hint ? `<div class="text-center text-[12.5px] pb-6" style="color:var(--ink-soft)">${esc(hint)}</div>` : ''}</main>`);
   }
 
   const ROUTES = [
@@ -581,7 +581,7 @@
   // ---------- Results / reveal / peek ----------
 
   async function renderResults(id, scrollToComments) {
-    loading('…');
+    loading('Crunching results…', 'Big lists can take a moment.');
     const [data, agg] = await Promise.all([
       api('/api/templates/' + id),
       api('/api/templates/' + id + '/aggregate'),
