@@ -109,6 +109,29 @@ async function seedStaging(pool) {
      ON CONFLICT (id) DO NOTHING`,
     [u[0].id, u[0].username]
   );
+  // --- Demo template 5: closed list (time limit already passed; drives the
+  // "This list has closed." state on /t/900005) ---
+  await pool.query(
+    `INSERT INTO templates (id, title, category, author_id, author_username, visibility, item_policy, closes_at)
+     VALUES (900005, 'Staging demo: closed list', 'Food', $1, $2, 'public', 'open', now() - interval '1 day')
+     ON CONFLICT (id) DO NOTHING`,
+    [u[0].id, u[0].username]
+  );
+  await pool.query(
+    `INSERT INTO template_items (id, template_id, name, canonical_key)
+     VALUES (900501, 900005, 'Toast', 'toast'), (900502, 900005, 'Cereal', 'cereal')
+     ON CONFLICT (id) DO NOTHING`
+  );
+  await pool.query(
+    `INSERT INTO rankings (id, template_id, user_id, username, status, submitted_at)
+     VALUES (900011, 900005, $1, $2, 'submitted', now() - interval '2 days')
+     ON CONFLICT (id) DO NOTHING`,
+    [u[0].id, u[0].username]
+  );
+  await pool.query(
+    `INSERT INTO ranking_items (ranking_id, item_id, tier) VALUES (900011, 900501, 1), (900011, 900502, 2)
+     ON CONFLICT DO NOTHING`
+  );
   for (const m of u.slice(0, 3)) {
     await pool.query(
       `INSERT INTO group_members (group_id, user_id, username) VALUES (900001, $1, $2)

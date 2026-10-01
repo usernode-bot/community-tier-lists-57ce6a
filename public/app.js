@@ -306,6 +306,16 @@
     loading('…');
     const data = await api('/api/templates/' + id);
     const t = data.template;
+    if (t.closed) {
+      const closeDate = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' })
+        .format(new Date(t.closes_at));
+      screen(`${header(esc(t.title))}<main class="max-w-xl mx-auto p-4">
+        <div class="card p-6 text-center"><div class="text-3xl mb-2">⏰</div>
+        <div class="font-semibold">This list has closed.</div>
+        <div class="text-[12px] mt-1" style="color:var(--ink-soft)">Closed ${closeDate}</div>
+        <button data-nav="/t/${id}/results" class="text-[13.5px] font-semibold mt-3" style="color:var(--ink-soft)">see the results →</button></div></main>`);
+      return;
+    }
     if (t.hidden) {
       screen(`${header(esc(t.title))}<main class="max-w-xl mx-auto p-4">
         <div class="card p-6 text-center"><div class="text-3xl mb-2">🚧</div>
@@ -348,6 +358,14 @@
     const placedCount = items.length - trayItems.length - skipped.length;
     const canSubmit = placedCount >= 1;
     const submitted = data.my.status === 'submitted';
+    const closesAt = t.closes_at ? new Date(t.closes_at) : null;
+    let closesLabel = '';
+    if (closesAt) {
+      const remain = closesAt.getTime() - Date.now();
+      const label = remain <= 86400000 ? '1 day' : remain <= 7 * 86400000 ? '1 week' : '1 month';
+      const fmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
+      closesLabel = `<div class="text-[11px] font-bold uppercase tracking-widest mb-2" style="color:var(--ink-soft)">Closes in ${label} · ${fmt.format(closesAt)}</div>`;
+    }
 
     const placer = sel && byId[sel] ? `<div class="card p-3 mt-2" id="placer">
       <div class="text-[12px] font-bold mb-2">Place “${esc(byId[sel].name)}”</div>
@@ -364,6 +382,7 @@
     })}
     <main class="max-w-xl mx-auto p-4 pb-10 un-safe-bottom">
       ${data.daily ? `<div class="text-[11px] font-bold uppercase tracking-widest mb-2" style="color:var(--accent)">Today's List · No. ${data.daily.edition_no}${data.daily.is_final ? ' · final' : ''}</div>` : ''}
+      ${closesLabel}
       <div class="text-[13px] mb-3" style="color:var(--ink-soft)">
         ${submitted ? 'You’ve ranked this — edits update the community aggregate live.' :
           `Aggregate hidden until you rank — ${placedCount} of ${items.length} placed${skipped.length ? `, ${skipped.length} skipped` : ''}.`}
@@ -981,6 +1000,13 @@
           <option value="">Public feed</option>
           ${(h ? h.groups : []).map((g) => `<option value="${g.id}" ${groupPre === g.id ? 'selected' : ''}>Group: ${esc(g.name)}</option>`).join('')}
         </select>
+        <div class="text-[12px] font-bold mt-3 mb-1" style="color:var(--ink-soft)">TIME LIMIT</div>
+        <select id="n-limit">
+          <option value="none">No limit</option>
+          <option value="1d">1 day</option>
+          <option value="1w">1 week</option>
+          <option value="1m">1 month</option>
+        </select>
       </div>
 
       <button id="n-publish" class="btn-primary mt-4">PUBLISH</button>
@@ -1044,6 +1070,7 @@
             item_policy: document.getElementById('n-policy').value,
             visibility: vis ? 'group' : 'public',
             group_id: vis || null,
+            time_limit: document.getElementById('n-limit').value,
           },
         });
         homeCache = null;

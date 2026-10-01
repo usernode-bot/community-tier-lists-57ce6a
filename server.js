@@ -255,6 +255,8 @@ app.get('/api/templates/:id', wrap(async (req, res) => {
       author_username: t.author_username, is_author: t.author_id === req.user.id,
       visibility: t.visibility, group_id: t.group_id ? String(t.group_id) : null,
       tier_labels: t.tier_labels, item_policy: t.item_policy, hidden: t.hidden,
+      closes_at: t.closes_at ? t.closes_at.toISOString() : null,
+      closed: !!(t.closes_at && new Date(t.closes_at) <= new Date()),
     },
     items,
     my: { status: mine ? mine.status : null, placements },
@@ -275,6 +277,9 @@ app.post('/api/templates', wrap(async (req, res) => {
   }
   const policy = ['open', 'approved', 'closed'].includes(b.item_policy) ? b.item_policy : 'open';
   const visibility = b.visibility === 'group' ? 'group' : 'public';
+  const timeLimit = ['1d', '1w', '1m'].includes(b.time_limit) ? b.time_limit : 'none';
+  const closesExpr = timeLimit === 'none' ? 'NULL' : `now() + interval '${
+    { '1d': '1 day', '1w': '1 week', '1m': '1 month' }[timeLimit] }'`;
   let groupId = null;
   if (visibility === 'group') {
     groupId = parseInt(b.group_id, 10);
@@ -295,8 +300,8 @@ app.post('/api/templates', wrap(async (req, res) => {
   if (items.length < 2) throw httpErr(400, 'A template needs at least 2 items');
 
   const ins = await pool.query(
-    `INSERT INTO templates (title, category, author_id, author_username, visibility, group_id, tier_labels, item_policy)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    `INSERT INTO templates (title, category, author_id, author_username, visibility, group_id, tier_labels, item_policy, closes_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ${closesExpr}) RETURNING id`,
     [title, b.category ? String(b.category).slice(0, 40) : null, req.user.id, req.user.username,
      visibility, groupId, labels, policy]);
   const tid = ins.rows[0].id;
@@ -387,6 +392,9 @@ app.put('/api/templates/:id/ranking', wrap(async (req, res) => {
   const t = await loadTemplate(req.params.id);
   await assertCanSee(t, req.user);
   if (t.hidden) throw httpErr(403, 'This list is hidden pending review');
+  if (t.closes_at && new Date(t.closes_at) <= new Date()) {
+    throw httpErr(403, 'This list has closed', 'list_closed');
+  }
   const k = t.tier_labels.length;
   const submit = req.query.submit === '1' || !!(req.body || {}).submit;
 
