@@ -48,9 +48,13 @@ implementation PR.
   steps — pressed states, sheets (comments, item detail, tier distribution),
   toasts, nav bars, safe areas, `unNative.transition` for push/pop. The tier
   drag itself is custom (see §6) and registers with `unNative.gestures`.
-- **Brand:** paper/ink family with **violet** accent (matches the scaffold's
-  existing violet), Fraunces for display type + Inter for UI, fixed warm→cool
-  tier ramp `S #E4573D · A #E5A83B · B #7FB542 · C #3F97E8 · D #8A6FDF`.
+- **Brand:** warm-grey paper (`#E7E5E0`) and ink (`#1E1B18`) with a
+  **terracotta** accent (`#9C4A30`, used as large circle buttons), Instrument
+  Serif for display/numbers/captions, Archivo for UI, Archivo Narrow (caps)
+  for list titles. Fixed pastel tier ramp
+  `S #E9A28C · A #EDCB80 · B #BACB96 · C #AFC6DB · D #CDB9DA` (6th tier
+  `#C9C6BE`), always with ink letters. Items render as original gouache-style
+  illustrations (`public/illustrations.js`), not emoji (illustrated redesign).
   Tier letters always accompany hue (colorblind-safe); ≥44pt touch targets.
 - **Back rule:** Home is root; every non-Home screen has ← to Home (or its
   parent); sheets dismiss in place. The results screen's ← always goes Home
@@ -350,8 +354,9 @@ capability, not something to fake app-side.
 ## 6. Ranking UX (product §6.4)
 
 - **Layout:** tier rows (fixed ramp colors, letter labels) on top, item tray
-  below. Items are typographic/emoji chips by default (the default aesthetic,
-  not a fallback); uploaded images render as small tiles.
+  below (a bottom sheet). Items are hand-drawn illustration tiles: an
+  uploaded image wins, else the item's own drawing, else its list's category
+  object (`public/illustrations.js`). Emoji are stored but no longer shown.
 - **Drag:** custom pointer-tracking drag (1:1 finger tracking, spring release
   via `unNative.spring`, claim through `unNative.gestures` so it composes with
   the kit's scroll/pull recognizers). Long-press lift on touch; immediate drag
@@ -432,8 +437,9 @@ groups) → publish.
   proxy vars are platform-injected and reserved.)
 
 **Image rights:** user uploads are user responsibility (report path covers
-them); **seed templates are text/emoji tiles only** — we never ship
-copyrighted imagery. v1 upload = paste an image URL (no file-upload pipeline);
+them); **seed templates never ship copyrighted imagery**: items are drawn
+with original in-repo SVG illustration specs (style references are never
+traced, and no brand names or logos are reproduced). v1 upload = paste an image URL (no file-upload pipeline);
 binary upload is backlog.
 
 ## 9. Groups
@@ -494,15 +500,16 @@ consent questions about republishing member rankings and costs one endpoint.
 ## 12. Share cards & deep links (product §7)
 
 - **Client-side `<canvas>` PNG rendering** (no server image pipeline, no new
-  dependencies), two formats, same 1200×630 dimensions as Game Corner so the
-  eventual shared-plumbing merge is mechanical (build-twice decision, §11 of
-  the product spec):
-  - **Grid card:** full tier grid in ramp colors + edition/template name +
-    "78% aligned · hottest take: Evangelion in B".
-  - **Hot-take card:** one item, huge type — "I put Messi in B tier. Fight
-    me." + template name + link.
-  - **Group variant:** "Climbing crew's S-tier: El Chorro" (group aggregate
-    top tier), member-triggered from the group space.
+  dependencies), poster formats on paper `#F1EDE4` with the item
+  illustrations (the illustrated redesign replaced the earlier 1200×630
+  Game-Corner-compatible cards):
+  - **Grid poster, 1080×1350:** "my tier list", the list title, a terracotta
+    alignment-% circle (crowd n when there is no score) and every tier row of
+    captioned drawings.
+  - **Hot-take poster, 1080×1080:** the item drawn large, me vs everyone-else
+    tier tiles, "TOP N% CONTRARIAN!" badge, "PINEAPPLE IS AN A." headline.
+  - **Group variant, 1080×1350:** "Climbing crew's verdict" with the group's
+    S-tier items drawn, member-triggered from the group space.
 - Share via Web Share API (`navigator.share` with the PNG file) where
   available; fallback = download + copy-link toast.
 - **Deep links:** the card link is the production app URL (`/t/:id`). The

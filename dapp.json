@@ -14,7 +14,7 @@
     }
   ],
   "tests": [
-    { "name": "Home renders", "path": "/", "expectText": "Today's List" },
+    { "name": "Home renders", "path": "/", "expectText": "Today's list" },
     { "name": "Feed shows rank CTA", "path": "/", "expectText": "Rank now" },
     { "name": "Rank screen renders", "path": "/t/900001", "expectSelector": "[data-tier-row]" },
     { "name": "Partial-submit hint renders", "path": "/t/900001", "expectText": "Rank at least one item to submit" },
@@ -22,10 +22,17 @@
     { "name": "Divided-opinions results render", "path": "/t/900004/results", "expectText": "Staging demo" },
     { "name": "Head-to-head gates on your own ranking", "path": "/t/900004/compare/staging-demo-user-1", "expectText": "Submit your own ranking first", "allowConsoleErrors": true },
     { "name": "Inline comments render on results", "path": "/t/900001/results", "expectText": "Staging demo comment" },
-    { "name": "Comment composer renders styled", "path": "/t/900001/results", "expectText": "ADD A COMMENT" },
+    { "name": "Comment composer renders styled", "path": "/t/900001/results", "expectText": "About" },
     { "name": "Create screen renders", "path": "/new", "expectText": "Tier scale" },
     { "name": "Theme control renders", "path": "/me", "expectSelector": "[data-theme-mode='system']" },
     { "name": "Dark deep link applies", "path": "/?theme=dark", "expectSelector": "html.dark" },
-    { "name": "Home renders in dark", "path": "/?theme=dark", "expectText": "Today's List" }
+    { "name": "Home renders in dark", "path": "/?theme=dark", "expectText": "Today's list" },
+    { "name": "Home lists stack opens a card", "path": "/", "expectSelector": ".stk.is-open" },
+    { "id": "home-illustrated", "name": "Illustrated home", "path": "/", "expectText": "Today's list", "visual": true, "impact": ["public/**"] },
+    { "name": "Rank board draws item illustrations", "path": "/t/900001", "expectSelector": "[data-illo] img" },
+    { "name": "Rank tray is a bottom sheet", "path": "/t/900001", "expectSelector": "[data-tray-sheet]" },
+    { "name": "Rank footer locks it in", "path": "/t/900001", "expectText": "Done when you are." },
+    { "name": "Results grid tabs", "path": "/t/900001/results", "expectText": "Crowd" },
+    { "name": "Illustration sheet renders", "path": "/illustrations", "expectSelector": "[data-illo-sheet] [data-illo] img" }
   ]
 }

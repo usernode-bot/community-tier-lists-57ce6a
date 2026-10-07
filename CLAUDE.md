@@ -60,11 +60,16 @@ spec's open questions.
 - **No engagement machinery:** no points for ranking/commenting, no
   view counters, no follower counts, no algorithmic feed (recency +
   raw activity counts only), no DMs, no star ratings.
-- **Seed templates use text/emoji tiles only** — never commit
-  copyrighted imagery. User-uploaded images are user responsibility
-  (report path covers them).
-- Tier ramp colors are fixed by position (S `#E4573D`, A `#E5A83B`,
-  B `#7FB542`, C `#3F97E8`, D `#8A6FDF`); tier letters always
-  accompany color (colorblind-safe).
+- **Items are drawn with original in-repo illustrations**
+  (`public/illustrations.js`: layer specs composed by one renderer in the
+  gouache + crayon-hatching style). Never commit copyrighted imagery, never
+  trace a reference, never draw brand names or logos. Resolution order:
+  uploaded image → item drawing (canonical key) → list category object →
+  carrier bag. Emoji stay in the DB but are not rendered. User-uploaded
+  images are user responsibility (report path covers them).
+- Tier ramp colors are fixed pastels by position (S `#E9A28C`, A `#EDCB80`,
+  B `#BACB96`, C `#AFC6DB`, D `#CDB9DA`, 6th `#C9C6BE`), always with ink
+  (`#1E1B18`) tier letters, never white (colorblind-safe, readable).
+- Share images are paper posters: grid 1080×1350, hot take 1080×1080.
 - Moderators = `MODERATOR_USERNAMES` (comma-separated `dapp.json`
   secret); auto-hide at 3 distinct reporters.
