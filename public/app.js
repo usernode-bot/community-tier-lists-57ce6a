@@ -146,27 +146,72 @@
     hydrateIllos($app);
   }
 
-  // ---------- illustrations ----------
-  // Every item renders through Illos (public/illustrations.js): uploaded
-  // photo first, else its own drawing, else its list's category object.
-  // Bitmaps are cached, so re-renders (every tap on the board) reuse them
-  // synchronously; first sightings are hydrated right after the render.
+  // ---------- item visuals ----------
+  // Every item renders as exactly one of:
+  //   photo    — an image someone uploaded for the item (image_url, no source)
+  //   official — the brand's logo / the show's poster (image_url + image_source,
+  //              seeded from seeds/item-images.js); shown as-is, never restyled
+  //   drawing  — its own gouache drawing in public/illustrations.js
+  //   name     — a clean name-only tile in the item's tint
+  // There are deliberately no category stand-ins: an item never shows a
+  // drawing of something it isn't.
   const I = window.Illos;
   const reducedMotion = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
-  function illoHtml(it, size, category, extraStyle = '') {
-    if (it && it.image_url) {
-      return `<span class="illo photo" style="width:${size}px;height:${size}px;${extraStyle}"><img src="${esc(it.image_url)}" alt=""></span>`;
-    }
-    const key = I.keyFor(it, category);
-    const url = I.cached(key, size);
-    return `<span class="illo" data-illo="${key}" data-isz="${size}" style="width:${size}px;height:${size}px;${extraStyle}">${url ? `<img src="${url}" alt="">` : ''}</span>`;
+  function visualOf(it) {
+    if (!it) return { kind: 'name' };
+    if (it.image_url) return { kind: it.image_source ? 'official' : 'photo', url: it.image_url };
+    const key = I.keyFor(it);
+    return key ? { kind: 'drawing', key } : { kind: 'name' };
   }
 
-  function figHtml(it, size, category, opts = {}) {
-    const rot = opts.rotate === false ? 0 : I.rotFor(it.id);
-    return `<span class="fig ${opts.cls || ''}" style="${opts.style || ''}">${illoHtml(it, size, category, `transform:rotate(${rot}deg)`)}<span class="cap">${esc(it.name)}</span></span>`;
+  // Name tile text: the whole name when there's room, else the initial.
+  function nameTileHtml(it, w, h, extraStyle = '') {
+    const name = (it && it.name) || '';
+    const small = w <= 34;
+    const longest = Math.max(1, ...name.split(/\s+/).map((x) => x.length));
+    // fit the longest word on one line (condensed caps ≈ 0.55em per letter)
+    const fs = small ? Math.round(w * 0.5)
+      : Math.max(8, Math.min(Math.round(w * (name.length <= 10 ? 0.2 : name.length <= 20 ? 0.165 : 0.14)), Math.floor((w - 8) / (longest * 0.56))));
+    return `<span class="illo nametile" style="width:${w}px;height:${h}px;background:${I.tintFor(it ? it.id : name)};${extraStyle}">`
+      + `<span style="font-size:${fs}px">${esc(small ? name.trim().charAt(0) : name)}</span></span>`;
   }
+
+  function illoHtml(it, size, _category, extraStyle = '') {
+    const v = visualOf(it);
+    if (v.kind === 'photo') {
+      return `<span class="illo photo" style="width:${size}px;height:${size}px;${extraStyle}"><img src="${esc(v.url)}" alt=""></span>`;
+    }
+    if (v.kind === 'official') {
+      return `<span class="illo official" data-iname="${esc(it.name)}" data-iid="${esc(it.id)}" style="width:${size}px;height:${size}px"><img src="${esc(v.url)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
+    }
+    if (v.kind === 'name') return nameTileHtml(it, size, size);
+    const url = I.cached(v.key, size);
+    return `<span class="illo" data-illo="${v.key}" data-isz="${size}" style="width:${size}px;height:${size}px;${extraStyle}">${url ? `<img src="${url}" alt="">` : ''}</span>`;
+  }
+
+  // Visual + caption. A name tile already carries the name, so it takes the
+  // caption's space instead of repeating it.
+  function figInner(it, size, extraCap = '') {
+    const v = visualOf(it);
+    if (v.kind === 'name') return nameTileHtml(it, size + 18, size + 14) + (extraCap ? `<span class="cap">${extraCap.replace(/^ · /, '')}</span>` : '');
+    const style = v.kind === 'drawing' ? `transform:rotate(${I.rotFor(it.id)}deg)` : '';
+    return `${illoHtml(it, size, null, style)}<span class="cap">${esc(it.name)}${extraCap}</span>`;
+  }
+
+  function figHtml(it, size, _category, opts = {}) {
+    return `<span class="fig ${opts.cls || ''}" style="${opts.style || ''}">${figInner(it, size)}</span>`;
+  }
+
+  // An official image that fails to load becomes the item's name tile, never
+  // a broken-image icon.
+  document.addEventListener('error', (e) => {
+    const img = e.target;
+    const box = img && img.tagName === 'IMG' && img.parentElement && img.parentElement.closest('.illo.official');
+    if (!box) return;
+    const w = box.offsetWidth || parseInt(box.style.width, 10) || 44;
+    box.outerHTML = nameTileHtml({ id: box.dataset.iid, name: box.dataset.iname }, w, w);
+  }, true);
 
   function hydrateIllos(rootEl) {
     (rootEl || document).querySelectorAll('[data-illo]').forEach((el) => {
@@ -178,8 +223,8 @@
   }
 
   // Warm the cache for a list's items before its screen paints.
-  function prewarm(items, category, size) {
-    return Promise.all((items || []).filter((it) => !it.image_url).map((it) => I.load(I.keyFor(it, category), size)));
+  function prewarm(items, _category, size) {
+    return Promise.all((items || []).map(visualOf).filter((v) => v.kind === 'drawing').map((v) => I.load(v.key, size)));
   }
 
   function topbar(left, right) {
@@ -411,7 +456,7 @@
       const nr = t.nr || `${t.n} ranked`;
       return `<article class="stk" data-stk="${i}" data-tid="${t.id}" style="background:${I.tintFor(t.id)}">
         <button class="stk-strip" aria-expanded="false" aria-controls="stkb-${i}" aria-label="${esc(t.title)}, ${esc(nr)}">
-          <span class="stk-ic">${illoHtml(null, 28, t.category)}</span>
+          <span class="stk-ic">${illoHtml(pv[0], 28)}</span>
           <span class="min-w-0 flex-1"><span class="cat">${esc(t.category || 'Lists')}</span><span class="tt cond truncate">${esc(t.title)}</span></span>
           <span class="nr">${esc(nr)}</span>
         </button>
@@ -501,7 +546,7 @@
 
     const tileHtml = (it) => `<button class="fig itile ${sel === it.id ? 'selected' : ''}" data-item="${it.id}" aria-pressed="${sel === it.id}"
         aria-label="${esc(it.name)}${it.status === 'proposed' ? ' (only you)' : ''}${it.is_new ? ' (new)' : ''}">
-      ${illoHtml(it, 44, t.category, `transform:rotate(${I.rotFor(it.id)}deg)`)}<span class="cap">${esc(it.name)}</span>
+      ${figInner(it, 44)}
       ${it.status === 'proposed' ? '<span class="flag">only you</span>' : it.is_new ? '<span class="flag">NEW</span>' : ''}
     </button>`;
 
@@ -856,7 +901,7 @@
       Most contested: <span class="dim">${esc(contested.name)}, spread across ${agg.items[agg.most_contested].dist.filter((c) => c > 0).length} tiers</span></button>` : '';
 
     const itemBtn = (it, extra) => `<button class="fig gitem" data-dist="${it.id}" aria-label="${esc(it.name)}: show the vote spread">
-        ${illoHtml(it, 42, t.category, `transform:rotate(${I.rotFor(it.id)}deg)`)}<span class="cap">${esc(it.name)}${extra || ''}</span>
+        ${figInner(it, 42, extra || '')}
         ${agg.most_contested === it.id ? '<span class="flag" style="background:var(--tint-danger-bg);color:var(--tint-danger-fg)">split</span>'
           : it.is_new ? '<span class="flag" style="background:var(--ink);color:var(--paper)">NEW</span>'
           : agg.comment_counts[it.id] ? `<span class="flag" style="background:var(--tint-neutral-bg);color:var(--tint-neutral-fg)" aria-label="${agg.comment_counts[it.id]} comments">${agg.comment_counts[it.id]} ¶</span>` : ''}
@@ -1616,12 +1661,38 @@
     });
   }
 
-  async function itemImage(it, category, size) {
-    if (it.image_url) {
-      const photo = await loadImage(it.image_url, true);
-      if (photo) return { img: photo, photo: true };
+  // Same four kinds as on screen. An image that can't load (offline, CORS)
+  // degrades to the name tile, never to a blank or a stand-in drawing.
+  async function itemImage(it, _category, size) {
+    const v = visualOf(it);
+    if (v.kind === 'photo' || v.kind === 'official') {
+      const img = await loadImage(v.url, true);
+      return img ? { kind: v.kind, img, item: it } : { kind: 'name', item: it };
     }
-    return { img: await loadImage(await I.load(I.keyFor(it, category), size, 'light')), photo: false };
+    if (v.kind === 'drawing') {
+      const img = await loadImage(await I.load(v.key, size, 'light'));
+      return img ? { kind: 'drawing', img, item: it } : { kind: 'name', item: it };
+    }
+    return { kind: 'name', item: it };
+  }
+
+  // Word-wrap `text` into at most `maxLines` lines of `maxW`, shrinking the
+  // font until it fits.
+  function wrapLines(x, text, family, px, minPx, maxW, maxLines) {
+    for (; px >= minPx; px -= 2) {
+      x.font = family.replace('{px}', px);
+      const lines = [];
+      let line = '';
+      for (const word of String(text).split(/\s+/)) {
+        const tryLine = line ? line + ' ' + word : word;
+        if (x.measureText(tryLine).width <= maxW || !line) line = tryLine;
+        else { lines.push(line); line = word; }
+      }
+      if (line) lines.push(line);
+      if (lines.length <= maxLines && lines.every((l) => x.measureText(l).width <= maxW)) return { lines, px };
+    }
+    x.font = family.replace('{px}', minPx);
+    return { lines: [ellipsize(x, String(text), maxW)], px: minPx };
   }
 
   function canvasBase(w, h, bg) {
@@ -1658,17 +1729,42 @@
   }
 
   function drawItem(x, entry, cx, top, size, rot, caption, capPx) {
-    if (entry && entry.img) {
-      x.save();
-      x.translate(cx, top + size / 2);
-      x.rotate(rot * Math.PI / 180);
-      if (entry.photo) {
-        rrect(x, -size / 2, -size / 2, size, size, size * 0.12);
-        x.clip();
-      }
-      x.drawImage(entry.img, -size / 2, -size / 2, size, size);
-      x.restore();
+    const kind = entry ? entry.kind : 'name';
+    if (kind === 'name') {
+      // the tile carries the name, so it takes the caption's space too
+      const it = (entry && entry.item) || { name: caption || '' };
+      const h = size + (caption ? capPx * 1.2 : 0);
+      x.fillStyle = I.tintFor(it.id || it.name);
+      rrect(x, cx - size / 2 - 8, top, size + 16, h, Math.max(12, size * 0.14)); x.fill();
+      x.fillStyle = SHARE.ink;
+      x.textAlign = 'center';
+      const fit = wrapLines(x, it.name.toUpperCase(), `600 {px}px ${F_COND}`, Math.round(size * 0.26), 14, size - 4, 4);
+      const lh = fit.px * 1.08;
+      const y0 = top + h / 2 - (fit.lines.length * lh) / 2 + fit.px * 0.82;
+      fit.lines.forEach((l, i) => x.fillText(l, cx, y0 + i * lh));
+      x.textAlign = 'left';
+      return;
     }
+    x.save();
+    x.translate(cx, top + size / 2);
+    if (kind === 'drawing') x.rotate(rot * Math.PI / 180);
+    if (kind === 'photo') {
+      rrect(x, -size / 2, -size / 2, size, size, size * 0.12);
+      x.clip();
+      // cover-fit
+      const s = Math.max(size / entry.img.width, size / entry.img.height);
+      x.drawImage(entry.img, -entry.img.width * s / 2, -entry.img.height * s / 2, entry.img.width * s, entry.img.height * s);
+    } else if (kind === 'official') {
+      // the official logo / poster, untouched, contain-fit on a white tile
+      x.fillStyle = '#FFFFFF';
+      rrect(x, -size / 2, -size / 2, size, size, size * 0.12); x.fill();
+      const pad = size * 0.07, box = size - pad * 2;
+      const s = Math.min(box / entry.img.width, box / entry.img.height);
+      x.drawImage(entry.img, -entry.img.width * s / 2, -entry.img.height * s / 2, entry.img.width * s, entry.img.height * s);
+    } else {
+      x.drawImage(entry.img, -size / 2, -size / 2, size, size);
+    }
+    x.restore();
     if (caption) {
       x.fillStyle = SHARE.soft;
       x.font = `italic ${capPx}px ${F_SERIF}`;
@@ -1790,7 +1886,7 @@
     x.shadowColor = 'rgba(30,27,24,.12)'; x.shadowBlur = 30; x.shadowOffsetY = 10;
     rrect(x, -270, -270, 540, 540, 40); x.fill();
     x.restore();
-    drawItem(x, entry, 370, 455 - 225, 450, -3, null);
+    drawItem(x, entry, 370, 455 - 225, 450, -3, null, 0);
 
     // me / everyone else tier tiles
     const tile = (label, idx, who, y) => {
@@ -1942,12 +2038,12 @@
     screen(`<main class="max-w-xl mx-auto px-4 pb-10 un-safe-top un-safe-bottom">
       ${topbar('<button data-nav="/">Close</button>', '')}
       <h1 class="cond text-[26px]">Illustration sheet</h1>
-      <div class="kicker text-[14px] mb-4">${keys.length} drawings · category fallbacks: ${I.FALLBACK_KEYS.join(', ')}</div>
+      <div class="kicker text-[14px] mb-4">${keys.length} drawings: food, flags and city landmarks</div>
       <div class="grid grid-cols-2 gap-3" data-illo-sheet>
         ${keys.map((k) => `<div class="card p-2 text-center" style="background:#FAF6EE;color:#1E1B18">
           ${illoHtml({ id: k, canonical_key: k, name: k }, 240, null, 'width:100%;height:auto;aspect-ratio:1')}
           <div class="flex items-end justify-center gap-2">${illoHtml({ id: k, canonical_key: k }, 96)}${illoHtml({ id: k, canonical_key: k }, 32)}</div>
-          <div class="serif ital text-[14px]">${esc(k)}${I.FALLBACK_KEYS.includes(k) ? ' · fallback' : ''}</div>
+          <div class="serif ital text-[14px]">${esc(k)}</div>
         </div>`).join('')}
       </div>
     </main>`);

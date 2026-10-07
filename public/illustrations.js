@@ -709,128 +709,301 @@
     );
   });
 
-  // ---------- category fallbacks + default ----------
-  def('coin', () => merge(
-    ball(20, 20, 14, 14, 'y', { la: 120, lb: 215, hatch: 9 }),
-    {
-      d: [
-        D('y2', arc(20, 20, 13, 13, 0, 360, 0.01), 1.1, 0.9),
-        D('y3', blob(20, 20, 9.5, 9.5, 0.03), 0.8, 0.6),
-        D('y2', 'M20 12.5 L22.2 17.4 L27.4 17.8 L23.4 21.2 L24.7 26.4 L20 23.6 L15.3 26.4 L16.6 21.2 L12.6 17.8 L17.8 17.4 Z', 0, 0.75, true),
-        D('y3', 'M20 12.5 L22.2 17.4 L27.4 17.8 L23.4 21.2 M24.7 26.4 L20 23.6 L15.3 26.4', 0.9, 0.8),
-      ],
-      l: [L('y2', 'M20 6 l0 1.4 M27 7.9 l-.7 1.2 M32.1 13 l-1.2 .7 M34 20 l-1.4 0 M32.1 27 l-1.2 -.7 M27 32.1 l-.7 -1.2 M20 34 l0 -1.4 M13 32.1 l.7 -1.2', 1, 0.85)],
-    },
-  ));
+  // ---------- flags (Countries) ----------
+  // Flag art is authored in a unit square (u,v ∈ 0..1) and warped onto a
+  // waving cloth, so stripes and emblems follow the folds.
+  const CLOTH = { x: 7, w: 29, y: 10, h: 19 };
+  const waveTop = (u) => CLOTH.y - 2.4 * Math.sin(u * Math.PI * 2);
+  const warp = (u, v) => [CLOTH.x + CLOTH.w * u, waveTop(u) + CLOTH.h * v];
+  function wpoly(uv) {
+    const pts = [];
+    for (let i = 0; i < uv.length; i++) {
+      const a = uv[i], b = uv[(i + 1) % uv.length];
+      for (let k = 0; k < 6; k++) pts.push(warp(a[0] + (b[0] - a[0]) * k / 6, a[1] + (b[1] - a[1]) * k / 6));
+    }
+    return 'M' + pts.map(pt).join(' L') + 'Z';
+  }
+  const urect = (u0, v0, u1, v1) => wpoly([[u0, v0], [u1, v0], [u1, v1], [u0, v1]]);
+  // circle that stays round on the 29×19 cloth (rv in v-units)
+  function ucirc(cu, cv, ru, n = 14) {
+    const rv = ru * CLOTH.w / CLOTH.h, pts = [];
+    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; pts.push(warp(cu + Math.cos(a) * ru, cv + Math.sin(a) * rv)); }
+    return smoothClosed(pts);
+  }
+  function ustar(cu, cv, ru, inner = 0.42) {
+    const rv = ru * CLOTH.w / CLOTH.h, uv = [];
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? inner : 1;
+      uv.push(warp(cu + Math.cos(a) * ru * r, cv + Math.sin(a) * rv * r));
+    }
+    return 'M' + uv.map(pt).join(' L') + 'Z';
+  }
+  const hbands = (cols, weights) => {
+    const total = (weights || cols.map(() => 1)).reduce((a, b) => a + b, 0);
+    let v = 0;
+    return cols.map((c, i) => { const w = (weights ? weights[i] : 1) / total; const d = urect(0, v, 1, v + w); v += w; return [c, d]; });
+  };
+  const vbands = (cols) => cols.map((c, i) => [c, urect(i / cols.length, 0, (i + 1) / cols.length, 1)]);
 
-  def('football', () => {
-    const b = blob(20, 19, 13.5, 13.5, 0.04);
-    return merge(
-      { f: [S('g1', 'M6 35 l1.5 -4 M10 35.5 l.8 -3.6 M14 35.6 l1.4 -4.2 M26 35.6 l-1 -3.8 M30 35.4 l1.4 -4 M34 35 l-.6 -3.4', 1.4, 0.9), F('g0', blob(20, 34.5, 15, 2.2), 0.7)] },
-      ball(20, 19, 13.5, 13.5, 'm', { la: 120, lb: 215, hatch: 7, lc: 'G' }),
-      {
-        f: [F('k1', shape([[20, 13.5], [24.5, 16.8], [23, 22], [17, 22], [15.5, 16.8]], 0.2)), F('k1', shape([[8, 13], [11, 10.5], [12.5, 15], [9.5, 18], [7, 17]], 0.2), 1, b), F('k1', shape([[29, 10], [32.5, 12.5], [32.5, 17], [29.5, 16.5], [27.5, 13]], 0.2), 1, b), F('k1', shape([[13, 27], [17.5, 27.5], [16.5, 32.5], [12, 31]], 0.2), 1, b), F('k1', shape([[25, 28], [29, 25.5], [31, 29], [27, 32]], 0.2), 1, b)],
-        d: [D('G', 'M20 13.5 L20 7 M24.5 16.8 L29 13 M23 22 L26 27.5 M17 22 L15 27.5 M15.5 16.8 L11 14', 0.8, 0.85)],
-      },
-    );
-  });
-
-  def('controller', () => {
-    const body = shape([[6, 16], [11, 12], [17, 13], [23, 13], [29, 12], [34, 16], [36, 27], [32.5, 31], [28, 27], [20, 26], [12, 27], [7.5, 31], [4, 27]], 0.4);
-    return {
-      f: [S('G', path([[20, 13], [19, 8], [23, 5], [29, 4], [33, 2]]), 1, 0.9), F('c1', body), F('c0', blob(13, 15, 6, 3), 0.35, body), F('c2', blob(28, 28, 12, 7), 0.75, body)],
-      h: [H('c2', body, [27, 25, 14, 10], 50, 7, 0.65)],
-      l: [L('c3', path([[6.2, 16.4], [4.2, 26.5], [7.6, 30.6]]), 1.1), L('c3', path([[28.5, 27.5], [32.5, 30.6]]), 0.9, 0.8)],
-      d: [
-        D('c0', 'M10 18.5 h5 v1.8 h-5Z M11.6 16.9 h1.8 v5 h-1.8Z', 0, 1, true),
-        D('s1', blob(27, 17, 1.6, 1.6), 0, 1, true), D('s1', blob(30.4, 19.6, 1.6, 1.6), 0, 1, true), D('r1', blob(23.8, 19.8, 1.5, 1.5), 0, 1, true), D('y1', blob(27, 22.4, 1.5, 1.5), 0, 1, true),
-        D('c0', 'M17 18 h2.4 M21 18 h2.4', 1.2, 0.8),
-      ],
-      p: [P(path([[10, 14.4], [15, 13.6]]), 0.8, 1)],
-    };
-  });
-
-  def('cereal-bowl', () => merge(
-    bowl(['y1', 'y2']),
-    {
-      f: [F('o1', ring(12, 18.6, 2.6, 1.7, 0.9, 0.6), 1, null, true), F('y0', ring(17, 18, 2.6, 1.6, 0.9, 0.6), 1, null, true), F('o1', ring(22.5, 18.4, 2.6, 1.6, 0.9, 0.6), 1, null, true), F('y0', ring(28, 18.8, 2.5, 1.6, 0.9, 0.6), 1, null, true), F('o2', ring(25.5, 20.6, 2.4, 1.4, 0.8, 0.5), 1, null, true)],
-    },
-  ));
-
-  def('laptop', () => {
-    const lid = poly([[8, 6], [32, 6], [32.5, 25], [7.5, 25]], 0.3);
-    const screen = poly([[10, 8.2], [30, 8.2], [30.2, 22.6], [9.8, 22.6]], 0.2);
-    const base = poly([[7.5, 25], [32.5, 25], [37, 32], [3, 32]], 0.3);
-    return {
-      f: [F('s1', lid), F('c1', screen), F('c2', blob(28, 20, 8, 6), 0.55, screen), F('m1', base), F('m2', blob(30, 31, 10, 4), 0.7, base), F('m3', shape([[16, 30], [24, 30], [24.6, 31.2], [15.4, 31.2]], 0.1), 0.8)],
-      h: [H('m3', base, [20, 28.4, 26, 3.6], 0, 4, 0.55), H('s2', lid, [29, 16, 6, 18], 70, 4, 0.55)],
-      l: [L('G', path([[7.8, 24.6], [8, 15], [8.2, 6.3], [20, 6]]), 1.1), L('G', path([[3.3, 31.8], [7.6, 25.3]]), 1)],
-      d: [D('c0', 'M12.5 11.5 h8 M12.5 14.2 h12 M12.5 16.9 h6 M14.5 19.6 h9', 1, 0.95), D('m3', 'M10 27.2 h20 M8.5 29 h23', 0.6, 0.7)],
-      p: [P(path([[11, 9.6], [11, 14]]), 0.55, 0.9)],
-    };
-  });
-
-  def('crt', () => {
-    const box = poly([[5, 6], [35, 6], [35.5, 30], [4.5, 30]], 0.5);
-    const scr = blob(18, 18, 10, 8.5, 0.04, 10);
-    return {
-      f: [
-        F('m1', shape([[13, 30], [27, 30], [29, 35], [11, 35]], 0.3)), F('m2', blob(26, 34, 6, 2), 0.7, shape([[13, 30], [27, 30], [29, 35], [11, 35]], 0.3)),
-        F('m1', box), F('m2', blob(32, 26, 14, 10), 0.65, box),
-        F('b2', scr), F('b1', blob(16, 16, 7, 5.5), 0.8, scr), F('b0', blob(14, 14, 3.5, 2.5), 0.45, scr),
-      ],
-      h: [H('m3', box, [30, 22, 10, 16], 50, 6, 0.55)],
-      l: [L('G', path([[5.2, 29.6], [5, 15], [5.3, 6.3], [18, 6]]), 1.1), L('b3', arc(18, 18, 10, 8.5, 120, 200), 0.9)],
-      d: [D('k1', blob(31, 12, 1.6, 1.6), 0, 1, true), D('k1', blob(31, 17.5, 1.6, 1.6), 0, 1, true), D('m3', 'M29.6 22.5 h3 M29.6 24.3 h3 M29.6 26.1 h3', 0.7, 0.9)],
-      t: [T('www', 11.6, 20.2, 0.9, 'P', -3)],
-      p: [P(path([[10.5, 13], [13, 11]]), 0.8, 1)],
-    };
-  });
-
-  def('map', () => {
-    const panels = [
-      poly([[4, 9], [14, 6], [14, 32], [4, 35]], 0.3),
-      poly([[14, 6], [26, 9], [26, 35], [14, 32]], 0.3),
-      poly([[26, 9], [36, 6], [36, 32], [26, 35]], 0.3),
-    ];
+  // parts: [[colour, d], ...] painted in order inside the cloth.
+  function flag(parts, extra = {}) {
+    const cloth = wpoly([[0, 0], [1, 0], [1, 1], [0, 1]]);
     return merge(
       {
-        f: [F('s0', panels[0]), F('g0', panels[1]), F('s0', panels[2]), F('s2', blob(14, 30, 6, 30), 0.35, panels[1]), F('g1', blob(9, 24, 4, 3), 0.7, panels[0]), F('s1', blob(31, 18, 4, 6), 0.7, panels[2]), F('g1', blob(21, 13, 3, 2.4), 0.6, panels[1])],
-        h: [H('s2', panels[1], [16, 22, 6, 24], 60, 5, 0.5), H('g2', panels[0], [9, 24, 6, 5], 40, 3, 0.6)],
-        l: [L('G', path([[4.2, 9.3], [4.1, 22], [4.2, 34.6]]), 1.1), L('G', path([[14, 6.2], [14, 31.8]]), 0.7, 0.6), L('G', path([[26, 9.2], [26, 34.8]]), 0.7, 0.6)],
-        d: [D('r1', 'M7 31 Q12 26 16 27 Q21 28 22 21 Q23 15 29 13', 1.1, 0.95)],
+        f: [
+          S('e1', 'M6 7 L6 37', 1.8), F('y1', blob(6, 6.4, 1.3, 1.3)),
+          ...parts.map(([c, d]) => F(c, d, 1, cloth)),
+          // folds: shadow in the troughs, paper light on the crests
+          F('k2', wpoly([[0.38, 0], [0.62, 0], [0.62, 1], [0.38, 1]]), 0.16, cloth),
+          F('k2', wpoly([[0.88, 0], [1, 0], [1, 1], [0.88, 1]]), 0.12, cloth),
+          S('P', path([warp(0.16, 0.08), warp(0.2, 0.5), warp(0.17, 0.92)]), 1.4, 0.35, cloth),
+          S('P', path([warp(0.72, 0.1), warp(0.76, 0.55)]), 1.1, 0.3, cloth),
+        ],
+        h: [H('k2', cloth, [24, 20, 8, 22], 70, 5, 0.22)],
+        l: [L('G', path([warp(0, 0), warp(0.18, -0.01), warp(0.36, 0.02)]), 1, 0.85), L('G', path([warp(1, 0.55), warp(1, 1)]), 0.9, 0.6)],
       },
-      { d: [D('P', 'M7 31 Q12 26 16 27 Q21 28 22 21 Q23 15 29 13', 0.5, 1)] },
-      ball(29.5, 11, 3.4, 3.4, 'r', { hatch: 0, la: 120, lb: 210 }),
-      { f: [S('r2', 'M29.5 14 L29.5 18.5', 1.2)], d: [D('P', blob(29.5, 10.6, 1.1, 1.1), 0, 1, true)] },
+      extra,
     );
-  });
+  }
 
-  def('clapper', () => {
-    const body = poly([[6, 15], [35, 15], [35, 34], [6, 34]], 0.4);
-    const arm = poly([[5.5, 13.4], [33, 5.5], [34, 9.3], [6.4, 17.2]], 0.2);
-    return {
-      f: [F('k2', body), F('k1', blob(13, 22, 9, 6), 0.5, body), F('k2', arm), F('P', 'M9.5 12.2 l4 -1.15 3 4 -4 1.1Z M17.5 9.9 l4 -1.15 3 4 -4 1.1Z M25.5 7.6 l4 -1.15 3 4 -4 1.1Z', 0.95, arm), F('m1', 'M6 15 h29 v3 h-29Z', 1, body), F('k1', 'M10 15 l4 0 -3 3 -4 0Z M18 15 l4 0 -3 3 -4 0Z M26 15 l4 0 -3 3 -4 0Z', 1, body)],
-      h: [H('k0', body, [28, 28, 14, 12], 45, 6, 0.5)],
-      l: [L('k0', path([[6.2, 33.6], [6.1, 24], [6.3, 18.6]]), 0.9, 0.9)],
-      d: [D('m2', 'M9 28 h22 M9 31 h16', 0.6, 0.6), D('k1', blob(6.4, 15.6, 1, 1), 0, 1, true)],
-      t: [T('take 1', 9.5, 25.6, 1, 'P', -2)],
-      darkLine: true,
-    };
+  def('brazil', () => flag([
+    ['b1', urect(0, 0, 1, 1)],
+    ['y1', wpoly([[0.08, 0.5], [0.5, 0.09], [0.92, 0.5], [0.5, 0.91]])],
+    ['c1', ucirc(0.5, 0.5, 0.17)],
+  ], { d: [D('P', path([warp(0.34, 0.44), warp(0.5, 0.4), warp(0.66, 0.52)]), 1, 0.95), D('P', 'M0 0', 0)] }));
+  def('argentina', () => flag([...hbands(['s1', 'm0', 's1']), ['y1', ucirc(0.5, 0.5, 0.07)]],
+    { d: [D('o2', ucirc(0.5, 0.5, 0.1), 0.6, 0.8)] }));
+  def('france', () => flag(vbands(['c1', 'm0', 'r1'])));
+  def('germany', () => flag(hbands(['k2', 'r1', 'y1'])));
+  def('spain', () => flag([...hbands(['r1', 'y1', 'r1'], [1, 2, 1]), ['r2', wpoly([[0.24, 0.38], [0.36, 0.38], [0.36, 0.6], [0.3, 0.66], [0.24, 0.6]])]],
+    { d: [D('y2', wpoly([[0.22, 0.34], [0.38, 0.34], [0.38, 0.38], [0.22, 0.38]]), 0, 1, true)] }));
+  def('england', () => flag([['m0', urect(0, 0, 1, 1)], ['r1', urect(0.43, 0, 0.57, 1)], ['r1', urect(0, 0.39, 1, 0.61)]]));
+  def('italy', () => flag(vbands(['b1', 'm0', 'r1'])));
+  def('portugal', () => flag([['b2', urect(0, 0, 0.4, 1)], ['r1', urect(0.4, 0, 1, 1)], ['y1', ucirc(0.4, 0.5, 0.13)], ['m0', ucirc(0.4, 0.5, 0.075)], ['r2', ucirc(0.4, 0.5, 0.05)]]));
+  def('netherlands', () => flag(hbands(['r1', 'm0', 'c1'])));
+  def('belgium', () => flag(vbands(['k2', 'y1', 'r1'])));
+  def('uruguay', () => flag([
+    ...hbands(['m0', 's1', 'm0', 's1', 'm0', 's1', 'm0', 's1', 'm0']),
+    ['m0', urect(0, 0, 0.38, 5 / 9)], ['y1', ucirc(0.19, 0.27, 0.075)],
+  ], { d: [D('o2', ucirc(0.19, 0.27, 0.105), 0.6, 0.8)] }));
+  def('croatia', () => {
+    const checks = [];
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+      checks.push([(r + c) % 2 ? 'm0' : 'r1', urect(0.42 + c * 0.04, 0.3 + r * 0.09, 0.46 + c * 0.04, 0.39 + r * 0.09)]);
+    }
+    return flag([...hbands(['r1', 'm0', 'c1']), ...checks]);
   });
+  def('morocco', () => flag([['r1', urect(0, 0, 1, 1)]], { d: [D('b2', ustar(0.5, 0.5, 0.17, 0.4), 1.3, 1)] }));
+  def('japan', () => flag([['m0', urect(0, 0, 1, 1)], ['r1', ucirc(0.5, 0.5, 0.18)]]));
+  def('mexico', () => flag([...vbands(['b2', 'm0', 'r1']), ['e1', ucirc(0.5, 0.5, 0.06)], ['b1', wpoly([[0.44, 0.62], [0.56, 0.62], [0.5, 0.68]])]]));
+  def('united-states', () => {
+    const stripes = [];
+    for (let i = 0; i < 13; i++) stripes.push([i % 2 ? 'm0' : 'r1', urect(0, i / 13, 1, (i + 1) / 13)]);
+    let dots = '';
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) {
+      const p = warp(0.04 + c * 0.075 + (r % 2) * 0.035, 0.07 + r * 0.12);
+      dots += `M${n1(p[0])} ${n1(p[1])} l.15 .15 `;
+    }
+    return flag([...stripes, ['c2', urect(0, 0, 0.4, 7 / 13)]], { d: [D('m0', dots, 0.8, 1)] });
+  });
+  def('senegal', () => flag(vbands(['b1', 'y1', 'r1']), { f: [F('b2', ustar(0.5, 0.5, 0.09))] }));
+  def('colombia', () => flag(hbands(['y1', 'c1', 'r1'], [2, 1, 1])));
 
-  def('bag', () => {
-    const bag = shape([[7, 13], [13, 13], [14, 7], [17, 13], [23, 13], [26, 6], [27, 13], [33, 13], [35, 36], [5, 36]], 0.4);
-    return {
+  // ---------- city landmarks (Travel) ----------
+  const sky = (hue = 's') => ({ f: [F(hue + '0', blob(20, 36.5, 15, 2.2), 0.8)] });
+
+  def('paris', () => {
+    const t = poly([[19.2, 3], [20.8, 3], [23, 16], [27.5, 34], [23.5, 34], [20, 26], [16.5, 34], [12.5, 34], [17, 16]], 0.2);
+    return merge(sky('m'), {
+      f: [F('e1', t), F('e2', poly([[20, 3], [20.8, 3], [23, 16], [27.5, 34], [23.5, 34], [20, 26]], 0.1), 0.55, t), S('e0', path([[18.6, 8], [17.6, 16], [14, 32]]), 0.8, 0.6, t)],
+      h: [H('e3', t, [20, 22, 16, 26], 45, 9, 0.6), H('e3', t, [20, 22, 16, 26], 135, 9, 0.5)],
+      l: [L('e3', path([[19.2, 3.2], [17, 16], [12.6, 33.6]]), 1)],
+      d: [D('e3', 'M15.5 21 h9 M17.2 15.5 h5.6 M18.6 10 h2.8', 1.2, 1)],
+    });
+  });
+  def('tokyo', () => {
+    const t = poly([[19.3, 3], [20.7, 3], [23, 17], [27, 34], [13, 34], [17, 17]], 0.2);
+    return merge(sky('s'), {
+      f: [F('r1', t), F('m0', urectL(14.8, 20, 25.2, 23), 1, t), F('m0', urectL(18.2, 9, 21.8, 11), 1, t), F('r2', poly([[20, 3], [20.7, 3], [23, 17], [27, 34], [20, 34]], 0.1), 0.5, t)],
+      h: [H('r3', t, [20, 24, 14, 22], 45, 8, 0.55), H('r3', t, [20, 24, 14, 22], 135, 8, 0.45)],
+      l: [L('r3', path([[19.3, 3.2], [17, 17], [13.2, 33.6]]), 1)],
+      p: [P(path([[18.3, 12], [17.5, 16]]), 0.6, 0.8)],
+    });
+  });
+  function urectL(x0, y0, x1, y1) { return `M${x0} ${y0} L${x1} ${y0} L${x1} ${y1} L${x0} ${y1}Z`; }
+  def('rome', () => {
+    const c = poly([[4, 16], [10, 11], [22, 9], [34, 11], [36, 16], [36, 31], [4, 31]], 0.3);
+    let arches = '';
+    for (const y of [19, 26]) for (let x = 7; x < 34; x += 4.2) arches += `M${x} ${y + 4} L${x} ${y} Q${x + 1.4} ${y - 2} ${x + 2.8} ${y} L${x + 2.8} ${y + 4} `;
+    return merge(sky('m'), {
+      f: [F('e0', c), F('o0', blob(12, 18, 9, 7), 0.4, c), F('e1', blob(32, 26, 10, 10), 0.6, c), F('m0', poly([[28, 9.5], [36, 11.5], [36, 16], [29, 14]], 0.2), 0.9)],
+      d: [D('e2', arches, 0.9, 0.9), D('e2', 'M4 17.5 h32 M4 24.5 h32', 0.8, 0.8)],
+      h: [H('e2', c, [28, 24, 16, 16], 60, 7, 0.5)],
+      l: [L('e3', path([[4.2, 30.6], [4.1, 16.2], [10, 11.2], [18, 9.4]]), 1)],
+      p: [P(path([[8, 14], [14, 11.5]]), 0.7, 1)],
+    });
+  });
+  def('new-york', () => {
+    const fig = shape([[15.5, 34], [16, 24], [17.5, 15], [19, 11.5], [21, 11.5], [22.5, 15], [24, 24], [24.5, 34]], 0.3);
+    return merge({
       f: [
-        S('p1', path([[9.5, 13.5], [10.5, 5], [14.5, 3.4], [16, 8], [16.5, 13]]), 2.2, 1), S('p1', path([[23.6, 13], [25, 4], [29, 3], [30.4, 8], [30.8, 13.3]]), 2.2, 1),
-        F('p1', bag), F('p0', blob(13, 22, 6, 10), 0.6, bag), F('p2', blob(31, 30, 9, 12), 0.55, bag),
-        S('p2', path([[20, 14], [18.5, 24], [20.5, 35]]), 1.2, 0.55, bag), S('P', path([[9, 16], [8.2, 26], [9, 33]]), 1.4, 0.7, bag),
+        F('m2', poly([[12.5, 34], [27.5, 34], [26.5, 38], [13.5, 38]], 0.2)),
+        S('b1', path([[22, 16], [25, 10], [26.5, 5]]), 2.4),
+        F('b1', fig), F('b0', blob(18, 22, 3, 9), 0.5, fig), F('b2', blob(23.5, 28, 4, 9), 0.6, fig),
+        F('b1', blob(20, 9.8, 2.2, 2.4)),
+        F('y1', blob(26.8, 3.2, 1.6, 2.2)), F('o1', blob(26.9, 3.8, 0.9, 1.2)),
+        F('b0', poly([[15.4, 21], [20, 20], [19.5, 24], [15.8, 25]], 0.2), 0.9),
       ],
-      h: [H('p2', bag, [30, 26, 8, 16], 70, 5, 0.55)],
-      l: [L('p2', path([[7.2, 13.5], [5.5, 25], [5.3, 35.6]]), 1, 0.85), L('p2', path([[14.4, 3.7], [16, 8.3]]), 0.8, 0.8)],
-      t: [T('thank', 10.5, 21, 0.95, 'p3', -6), T('you!', 13.5, 28.5, 0.95, 'p3', -6)],
-    };
+      h: [H('b2', fig, [22, 26, 8, 16], 70, 5, 0.6)],
+      l: [L('b3', path([[15.6, 33.6], [16.1, 24], [17.6, 15.2]]), 1), L('b3', 'M17.6 8.4 l-1.6 -1.6 M19.2 7.6 l-.6 -2 M21 7.6 l.5 -2 M22.5 8.4 l1.6 -1.4', 0.9)],
+      d: [D('m3', 'M13.5 35.5 h13', 0.6, 0.8)],
+    });
+  });
+  def('barcelona', () => {
+    const spire = (x, top, w) => shape([[x - w, 35], [x - w * 0.9, top + 8], [x, top], [x + w * 0.9, top + 8], [x + w, 35]], 0.3);
+    const sp = [spire(10, 9, 3), spire(16.5, 4, 3.2), spire(23.5, 4, 3.2), spire(30, 9, 3)];
+    return merge(sky('m'), {
+      f: [F('m2', poly([[6, 22], [34, 22], [34, 35], [6, 35]], 0.3)), ...sp.map((d, i) => F(i % 2 ? 'e0' : 'm2', d)), ...sp.map((d) => F('e1', blob(26, 30, 14, 12), 0.35, d)),
+        F('g1', blob(16.5, 4.2, 1.1, 1.1)), F('r1', blob(23.5, 4.2, 1.1, 1.1)), F('y1', blob(10, 9, 0.9, 0.9)), F('o1', blob(30, 9, 0.9, 0.9))],
+      d: [D('e2', 'M10 15 v2 M10 20 v2 M16.5 12 v2 M16.5 17 v2 M23.5 12 v2 M23.5 17 v2 M30 15 v2 M30 20 v2', 1, 0.9), D('e2', 'M17 30 q3 -5 6 0 v5 h-6Z', 0.9, 0.9)],
+      h: [H('e2', poly([[6, 22], [34, 22], [34, 35], [6, 35]], 0.3), [26, 29, 14, 12], 50, 6, 0.5)],
+      l: [L('e3', path([[6.8, 34.6], [7.2, 17], [10, 9.2]]), 1)],
+    });
+  });
+  def('istanbul', () => {
+    const body = poly([[6, 24], [34, 24], [34, 34], [6, 34]], 0.3);
+    return merge(sky('s'), {
+      f: [
+        S('m2', 'M5 33 L5 9', 1.6), S('m2', 'M35 33 L35 9', 1.6), F('m2', blob(5, 8.5, 0.8, 1.8)), F('m2', blob(35, 8.5, 0.8, 1.8)),
+        F('m1', body), F('s1', blob(20, 19, 8, 6.5)), F('m1', poly([[11.5, 19], [28.5, 19], [28.5, 24.5], [11.5, 24.5]], 0.2)),
+        F('s1', blob(11, 23.5, 4, 3)), F('s1', blob(29, 23.5, 4, 3)), F('s2', blob(24, 21, 6, 5), 0.55, blob(20, 19, 8, 6.5)),
+      ],
+      h: [H('m3', body, [27, 29, 14, 10], 50, 6, 0.5)],
+      l: [L('G', path([[6.2, 33.6], [6.1, 25], [11, 23.4]]), 1), L('s3', arc(20, 19, 8, 6.5, 190, 260), 0.9)],
+      d: [D('m3', 'M9 28 q1 -2 2 0 v3 M14 28 q1 -2 2 0 v3 M24 28 q1 -2 2 0 v3 M29 28 q1 -2 2 0 v3', 0.8, 0.9), D('y2', 'M20 12.5 L20 10', 0.8)],
+      p: [P(arc(20, 19, 5.5, 4.5, 200, 245), 0.75, 1.1)],
+    });
+  });
+  def('taipei', () => {
+    const segs = [];
+    for (let i = 0; i < 6; i++) { const y = 30 - i * 4.2; segs.push(poly([[14.6, y], [25.4, y], [24, y - 4.2], [16, y - 4.2]], 0.15)); }
+    return merge(sky('s'), {
+      f: [F('b0', poly([[13, 30], [27, 30], [27, 35], [13, 35]], 0.2)), ...segs.map((d, i) => F(i % 2 ? 'b0' : 's1', d)), ...segs.map((d) => F('b2', blob(25, 18, 4, 20), 0.4, d)),
+        F('b0', poly([[18, 4.8], [22, 4.8], [21, 2.5], [19, 2.5]], 0.1)), S('G', 'M20 2.6 L20 0.5', 0.8)],
+      d: [D('b2', 'M15 28 h10 M15.4 23.8 h9.2 M15.8 19.6 h8.4 M16.2 15.4 h7.6 M16.6 11.2 h6.8 M17 7 h6', 0.6, 0.8)],
+      l: [L('b3', path([[13.2, 34.6], [13.4, 30.2], [16, 25.8]]), 1)],
+      p: [P(path([[16.5, 27], [16.2, 24]]), 0.7, 0.9), P(path([[17.2, 18.5], [17, 15.6]]), 0.6, 0.8)],
+    });
+  });
+  def('seoul', () => {
+    const hill = blob(20, 36, 18, 8, 0.05);
+    return merge({
+      f: [F('g1', hill), F('g2', blob(28, 38, 12, 6), 0.6, hill), S('m2', 'M20 30 L20 10', 2.4), F('m1', blob(20, 12, 3.2, 2.2)), F('r1', blob(20, 9.4, 2.2, 0.9)), S('r1', 'M20 8.8 L20 3', 0.9), F('m2', poly([[17.5, 30], [22.5, 30], [21.5, 33], [18.5, 33]], 0.1))],
+      h: [H('g2', hill, [24, 34, 18, 6], 70, 7, 0.55)],
+      l: [L('g3', arc(20, 36, 18, 8, 190, 240), 1), L('G', 'M18.9 29 L18.9 13.5', 0.8, 0.8)],
+      p: [P(path([[18.2, 11.4], [19.4, 10.9]]), 0.7, 0.8)],
+    });
+  });
+  def('singapore', () => {
+    const tw = (x) => poly([[x - 2.5, 34], [x - 2.2, 12], [x + 2.2, 13.5], [x + 2.5, 34]], 0.2);
+    const t = [tw(11), tw(20), tw(29)];
+    return merge(sky('s'), {
+      f: [...t.map((d) => F('m1', d)), ...t.map((d) => F('s1', blob(23, 26, 14, 14), 0.45, d)), F('m2', shape([[5, 11.5], [35, 9.5], [36, 11], [6, 13.5]], 0.2)), F('g1', blob(20, 10, 4, 0.8), 0.9), F('c1', poly([[4, 34], [36, 34], [36, 37], [4, 37]], 0.3), 0.8)],
+      h: [H('m3', t[2], [30, 24, 6, 20], 70, 4, 0.5)],
+      d: [D('s2', 'M9 16 v16 M11 16 v16 M18 16 v16 M20 16 v16 M27 16 v16 M29 16 v16', 0.5, 0.6)],
+      l: [L('G', path([[8.6, 33.6], [8.8, 12.3]]), 1)],
+    });
+  });
+  def('bologna', () => {
+    const t1 = poly([[12, 35], [12.5, 4], [17, 4], [17.5, 35]], 0.2);
+    const t2 = poly([[21, 35], [23, 13], [27, 13.4], [26, 35]], 0.2);
+    return merge(sky('m'), {
+      f: [F('e1', t1), F('e2', poly([[15, 4], [17, 4], [17.5, 35], [15, 35]], 0.1), 0.5, t1), F('o1', t2), F('e1', poly([[24.5, 13], [27, 13.4], [26, 35], [24, 35]], 0.1), 0.5, t2)],
+      h: [H('e2', t1, [15, 20, 6, 30], 20, 6, 0.5), H('e2', t2, [24, 24, 6, 22], 20, 5, 0.5)],
+      d: [D('e3', 'M13.5 10 v1.6 M15.5 18 v1.6 M14 26 v1.6 M23.6 20 v1.6 M24 27 v1.6', 1, 0.9), D('e3', 'M12.4 6 h4.8 M22.9 15 h4', 0.7, 0.8)],
+      l: [L('e3', path([[12.1, 34.6], [12.5, 4.3]]), 1)],
+    });
+  });
+  def('mumbai', () => {
+    const g = poly([[5, 34], [5, 14], [10, 12], [30, 12], [35, 14], [35, 34]], 0.3);
+    return merge(sky('s'), {
+      f: [F('e0', g), F('o0', blob(12, 18, 8, 6), 0.45, g), F('e1', blob(32, 28, 9, 10), 0.55, g), F('m0', shape([[15, 34], [15, 22], [20, 17], [25, 22], [25, 34]], 0.2), 0.95), F('e0', blob(20, 10.5, 4, 2.6)), F('e0', blob(8, 11.5, 1.6, 1.4)), F('e0', blob(32, 11.5, 1.6, 1.4))],
+      d: [D('e2', 'M7 22 q1.2 -2 2.4 0 v4 h-2.4Z M30.6 22 q1.2 -2 2.4 0 v4 h-2.4Z M5 16 h30', 0.8, 0.9)],
+      h: [H('e2', g, [30, 26, 10, 14], 60, 5, 0.5)],
+      l: [L('e3', path([[5.2, 33.6], [5.2, 14.4], [10, 12.3]]), 1), L('e3', path([[15.2, 33.6], [15.2, 22.2], [19.8, 17.3]]), 0.8, 0.8)],
+    });
+  });
+  def('marrakesh', () => {
+    const t = poly([[14, 35], [14, 9], [26, 9], [26, 35]], 0.25);
+    return merge(sky('s'), {
+      f: [F('o0', poly([[4, 32], [36, 32], [36, 36], [4, 36]], 0.3), 0.7), F('e0', t), F('e1', poly([[21, 9], [26, 9], [26, 35], [21, 35]], 0.1), 0.5, t), F('e0', poly([[16.5, 9], [23.5, 9], [23.5, 4.5], [16.5, 4.5]], 0.2)), F('b1', poly([[14, 9], [26, 9], [26, 10.6], [14, 10.6]], 0.1)), F('y1', blob(20, 3, 0.9, 0.9)), S('y2', 'M20 4.5 L20 1.5', 0.6)],
+      d: [D('e2', 'M17 15 q1 -2 2 0 v3 M21 15 q1 -2 2 0 v3 M17.5 23 q1 -2 2 0 v3 M21.5 23 q1 -2 2 0 v3', 0.8, 0.9), D('b2', 'M14.5 12 h11', 0.6, 0.8)],
+      h: [H('e2', t, [23, 22, 6, 26], 70, 5, 0.5)],
+      l: [L('e3', path([[14.2, 34.6], [14.1, 11]]), 1)],
+    });
+  });
+  def('osaka', () => {
+    const roof = (y, w) => shape([[20 - w, y + 2.5], [20 - w * 0.7, y], [20 + w * 0.7, y], [20 + w, y + 2.5]], 0.15);
+    const base = poly([[6, 35], [8.5, 27], [31.5, 27], [34, 35]], 0.3);
+    return merge(sky('s'), {
+      f: [F('m2', base), F('m3', blob(28, 33, 8, 5), 0.4, base),
+        F('m0', poly([[11, 27], [29, 27], [29, 22], [11, 22]], 0.2)), F('b0', roof(20, 11)),
+        F('m0', poly([[13, 20.5], [27, 20.5], [27, 16], [13, 16]], 0.2)), F('b0', roof(14, 9)),
+        F('m0', poly([[15, 14.5], [25, 14.5], [25, 10.5], [15, 10.5]], 0.2)), F('b0', roof(8, 7)), F('y1', blob(15.5, 7.4, 0.7, 0.6)), F('y1', blob(24.5, 7.4, 0.7, 0.6))],
+      h: [H('m3', base, [26, 31, 12, 8], 30, 6, 0.55)],
+      d: [D('k1', 'M14 24 h1.4 M18 24 h1.4 M22 24 h1.4 M26 24 h1.4 M16 18 h1.4 M20 18 h1.4 M24 18 h1.4 M18 12.5 h1.4 M21.6 12.5 h1.4', 1, 0.8), D('m3', 'M8 31 h24 M7 33 h26', 0.5, 0.7)],
+      l: [L('b3', path([[9, 22.3], [12.3, 20], [27.7, 20]]), 0.9), L('G', path([[6.2, 34.6], [8.6, 27.2]]), 0.9)],
+    });
+  });
+  def('bangkok', () => {
+    const p = shape([[12, 35], [14, 26], [16.5, 18], [18.5, 9], [20, 2.5], [21.5, 9], [23.5, 18], [26, 26], [28, 35]], 0.3);
+    return merge(sky('o'), {
+      f: [F('o0', p), F('e0', blob(25, 26, 6, 12), 0.6, p), F('o0', shape([[5, 35], [6, 29], [9, 26], [11, 29], [12, 35]], 0.2)), F('o0', shape([[28, 35], [29, 29], [31, 26], [34, 29], [35, 35]], 0.2))],
+      d: [D('c1', 'M15 31 h10 M16 25 h8 M17.3 19 h5.4 M18.6 13 h2.8', 1.2, 0.9), D('r1', 'M14.6 28 l.4 .4 M18 28 l.4 .4 M21.6 28 l.4 .4 M25 28 l.4 .4 M17 22 l.4 .4 M22.4 22 l.4 .4', 1.2, 1), D('y1', 'M16.2 16 h7.6', 0.8, 1)],
+      h: [H('m3', p, [24, 26, 8, 16], 60, 5, 0.5)],
+      l: [L('G', path([[12.2, 34.6], [14.2, 26], [16.7, 18], [18.6, 9.3]]), 1)],
+    });
+  });
+  def('mexico-city', () => merge(sky('s'), {
+    f: [F('m2', poly([[13, 35], [27, 35], [26, 30], [14, 30]], 0.2)), S('m1', 'M20 30 L20 10', 3.6), S('m2', 'M21 29 L21 11', 1.2, 0.7), F('m1', poly([[17.5, 10.5], [22.5, 10.5], [22, 8.5], [18, 8.5]], 0.1)),
+      F('y1', shape([[19.2, 8.5], [20.8, 8.5], [21, 4.5], [20, 3.5], [19, 4.5]], 0.15)), F('y1', leaf(20, 6, 15.5, 3.5, 1.4)), F('y1', leaf(20, 6, 24.5, 3.5, 1.4)), F('y2', blob(21, 6, 1, 2), 0.6)],
+    d: [D('m3', 'M18.4 14 h3.2 M18.4 22 h3.2', 0.7, 0.8), D('y2', 'M15.8 3.8 l1 .6 M24.2 3.8 l-1 .6', 0.6, 0.8)],
+    l: [L('G', 'M18.3 29.6 L18.3 11', 0.9, 0.9)],
+    p: [P('M19 12 L19 27', 0.6, 0.7)],
+  }));
+  def('hong-kong', () => {
+    const hull = shape([[5, 27], [35, 27], [32, 32], [9, 32]], 0.3);
+    const s1 = shape([[11, 25], [11, 9], [18, 7], [19, 25]], 0.3), s2 = shape([[21, 25], [21, 5], [29, 8], [30, 25]], 0.3);
+    let ribs = '';
+    for (let y = 11; y < 25; y += 3) ribs += `M11 ${y} L19 ${y - 0.5} M21 ${y - 1} L30 ${y - 0.3} `;
+    return merge({
+      f: [F('c1', blob(20, 35, 17, 3), 0.85), S('c0', 'M7 34 q2 -1 4 0 q2 1 4 0 M23 35 q2 -1 4 0 q2 1 4 0', 0.8, 0.9), F('e1', hull), F('e2', blob(28, 31, 9, 3), 0.6, hull), S('e3', 'M15 25 L15 6 M25 25 L25 4', 0.8), F('r1', s1), F('r1', s2), F('r2', blob(28, 18, 4, 9), 0.5, s2), F('r2', blob(18, 18, 3, 9), 0.45, s1)],
+      d: [D('r3', ribs, 0.6, 0.7)],
+      h: [H('e2', hull, [24, 30, 18, 4], 60, 6, 0.5)],
+      l: [L('e3', path([[5.2, 27.3], [9, 31.8]]), 1), L('r3', path([[11.1, 24.6], [11.1, 9.4], [17.6, 7.3]]), 0.9)],
+    });
+  });
+  def('new-orleans', () => {
+    const car = poly([[5, 30], [5, 14], [35, 14], [35, 30]], 0.3);
+    let win = '';
+    for (let x = 7.5; x < 33; x += 4.5) win += `M${x} 17 h3 v5 h-3Z `;
+    return merge({
+      f: [F('b1', car), F('b2', blob(30, 26, 12, 8), 0.5, car), F('r1', poly([[5, 24.5], [35, 24.5], [35, 26.5], [5, 26.5]], 0.15)), F('b1', shape([[6, 14], [8, 10.5], [32, 10.5], [34, 14]], 0.2)), S('k2', 'M20 10.5 L20 4 M17 4 L23 4', 0.8),
+        F('k2', blob(11, 31.5, 2.2, 2.2)), F('k2', blob(29, 31.5, 2.2, 2.2)), S('k1', 'M3 34 L37 34', 1)],
+      d: [D('y0', win, 0, 0.95, true), D('b3', win, 0.6, 0.7), D('y1', 'M5.5 28 h29', 0.6, 0.8)],
+      h: [H('b2', car, [28, 22, 14, 14], 60, 6, 0.5)],
+      l: [L('b3', path([[5.2, 29.6], [5.1, 14.3], [8, 10.7]]), 1)],
+    });
+  });
+  def('lima', () => {
+    const f = poly([[8, 35], [8, 18], [32, 18], [32, 35]], 0.3);
+    const tower = (x) => poly([[x - 3, 18], [x - 3, 8], [x + 3, 8], [x + 3, 18]], 0.2);
+    return merge(sky('s'), {
+      f: [F('y0', f), F('y0', tower(10)), F('y0', tower(30)), F('o0', blob(28, 28, 10, 9), 0.5, f), F('e0', blob(10, 7, 3.2, 2.6)), F('e0', blob(30, 7, 3.2, 2.6)), F('y0', shape([[15, 18], [20, 12], [25, 18]], 0.2)), F('e1', shape([[17.5, 35], [17.5, 27], [20, 24], [22.5, 27], [22.5, 35]], 0.2))],
+      d: [D('o2', 'M9 12 h2 v3 h-2Z M29 12 h2 v3 h-2Z M12 23 v4 M28 23 v4 M8 20 h24', 0.8, 0.9)],
+      h: [H('o2', f, [28, 28, 10, 12], 60, 5, 0.5)],
+      l: [L('e3', path([[8.2, 34.6], [8.1, 18.4], [7.2, 8.4]]), 1)],
+    });
   });
 
   // ---------- hand lettering (monoline path alphabet, 1 unit grid) ----------
@@ -899,10 +1072,14 @@
     const minW = 20 / size; // keep lines ≥ 1 device px at 2× rasterization
     const hk = size < 32 ? 0.5 : size < 64 ? 0.8 : size >= 96 ? 1.25 : 1;
     const defs = [];
-    let clipN = 0;
+    const clipIds = new Map(); // identical clip shapes share one def
     const clipRef = (d) => {
-      const cid = `${id}k${clipN++}`;
-      defs.push(`<clipPath id="${cid}"><path d="${d}"/></clipPath>`);
+      let cid = clipIds.get(d);
+      if (!cid) {
+        cid = `${id}k${clipIds.size}`;
+        clipIds.set(d, cid);
+        defs.push(`<clipPath id="${cid}"><path d="${d}"/></clipPath>`);
+      }
       return `clip-path="url(#${cid})"`;
     };
     const fills = (spec.f || []).map((e) => {
@@ -967,26 +1144,21 @@
     mushroom: 'mushrooms', onion: 'onions', olives: 'black-olives', 'black-olive': 'black-olives',
     cheese: 'extra-cheese', basil: 'fresh-basil', peppers: 'green-peppers', 'green-pepper': 'green-peppers',
     jalapeno: 'jalapenos', anchovy: 'anchovies', artichoke: 'artichokes', pancake: 'pancakes', waffle: 'waffles',
+    'pineapple-on-pizza': 'pineapple', usa: 'united-states', 'united-states-of-america': 'united-states', holland: 'netherlands',
+    nyc: 'new-york', 'new-york-city': 'new-york', 'marrakech': 'marrakesh',
   };
-  const CATEGORY_FALLBACKS = {
-    crypto: 'coin', sports: 'football', platform: 'controller', gaming: 'controller', food: 'cereal-bowl',
-    tech: 'laptop', internet: 'crt', travel: 'map', 'tv & film': 'clapper', 'tv and film': 'clapper',
-  };
-  const DEFAULT_KEY = 'bag';
-  const FALLBACK_KEYS = ['coin', 'football', 'controller', 'cereal-bowl', 'laptop', 'crt', 'map', 'clapper', 'bag'];
-
-  function keyFor(item, category) {
-    if (item) {
-      for (const k of [item.canonical_key, normKey(item.name)]) {
-        if (!k) continue;
-        if (ILLOS[k]) return k;
-        if (ALIASES[k]) return ALIASES[k];
-      }
+  // An item gets a drawing only when one exists for it specifically. There
+  // are no category stand-ins (no generic coin/football/film icon): an item
+  // with neither an official image nor its own drawing renders as a
+  // name-only tile, decided by the caller (keyFor returns null).
+  function keyFor(item) {
+    if (!item) return null;
+    for (const k of [item.canonical_key, normKey(item.name)]) {
+      if (!k) continue;
+      if (ILLOS[k]) return k;
+      if (ALIASES[k]) return ALIASES[k];
     }
-    return categoryKey(category);
-  }
-  function categoryKey(category) {
-    return CATEGORY_FALLBACKS[String(category || '').trim().toLowerCase()] || DEFAULT_KEY;
+    return null;
   }
 
   // ---------- rasterize once, reuse everywhere ----------
@@ -1006,7 +1178,7 @@
 
   function load(key, size, theme) {
     theme = theme || themeOf();
-    if (!ILLOS[key] || failed.has(key)) key = DEFAULT_KEY;
+    if (!ILLOS[key] || failed.has(key)) return Promise.resolve(null);
     const ck = cacheKey(key, size, theme);
     if (cache.has(ck)) return Promise.resolve(cache.get(ck));
     if (pending.has(ck)) return pending.get(ck);
@@ -1015,7 +1187,7 @@
       try { src = svgUrl(key, size, theme); } catch (err) {
         console.warn('illustration failed', key, err);
         failed.add(key);
-        resolve(key === DEFAULT_KEY ? '' : load(DEFAULT_KEY, size, theme));
+        resolve(null);
         return;
       }
       const img = new Image();
@@ -1040,7 +1212,7 @@
       img.onerror = () => {
         console.warn('illustration failed to rasterize', key);
         failed.add(key);
-        resolve(key === DEFAULT_KEY ? src : load(DEFAULT_KEY, size, theme));
+        resolve(null);
       };
       img.src = src;
     });
@@ -1049,7 +1221,7 @@
     return p;
   }
   function cached(key, size, theme) {
-    if (!ILLOS[key] || failed.has(key)) key = DEFAULT_KEY;
+    if (!ILLOS[key] || failed.has(key)) return null;
     return cache.get(cacheKey(key, size, theme || themeOf())) || null;
   }
 
@@ -1057,9 +1229,9 @@
   const rotFor = (id) => (hashStr('r' + id) % 13) - 6;
 
   const api = {
-    PAL, TINTS, FALLBACK_KEYS, DEFAULT_KEY,
+    PAL, TINTS,
     keys: () => Object.keys(ILLOS),
-    compose, keyFor, categoryKey, normKey, load, cached, tintFor, rotFor, hashStr,
+    compose, keyFor, normKey, load, cached, tintFor, rotFor, hashStr,
   };
   root.Illos = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

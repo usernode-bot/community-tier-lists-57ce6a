@@ -53,8 +53,9 @@ implementation PR.
   Serif for display/numbers/captions, Archivo for UI, Archivo Narrow (caps)
   for list titles. Fixed pastel tier ramp
   `S #E9A28C · A #EDCB80 · B #BACB96 · C #AFC6DB · D #CDB9DA` (6th tier
-  `#C9C6BE`), always with ink letters. Items render as original gouache-style
-  illustrations (`public/illustrations.js`), not emoji (illustrated redesign).
+  `#C9C6BE`), always with ink letters. Items render as official logos/covers
+  (brands, crypto, shows), original gouache-style drawings (food, flags,
+  landmarks) or name tiles, never emoji (illustrated redesign).
   Tier letters always accompany hue (colorblind-safe); ≥44pt touch targets.
 - **Back rule:** Home is root; every non-Home screen has ← to Home (or its
   parent); sheets dismiss in place. The results screen's ← always goes Home
@@ -354,9 +355,11 @@ capability, not something to fake app-side.
 ## 6. Ranking UX (product §6.4)
 
 - **Layout:** tier rows (fixed ramp colors, letter labels) on top, item tray
-  below (a bottom sheet). Items are hand-drawn illustration tiles: an
-  uploaded image wins, else the item's own drawing, else its list's category
-  object (`public/illustrations.js`). Emoji are stored but no longer shown.
+  below (a bottom sheet). Each item shows something specific to it: an
+  uploaded image wins, else its official logo / cover art (brands, crypto,
+  shows; `image_source` records where it came from), else its own drawing
+  (food, flags, landmarks in `public/illustrations.js`), else a name-only
+  tile. No category stand-ins. Emoji are stored but no longer shown.
 - **Drag:** custom pointer-tracking drag (1:1 finger tracking, spring release
   via `unNative.spring`, claim through `unNative.gestures` so it composes with
   the kit's scroll/pull recognizers). Long-press lift on touch; immediate drag

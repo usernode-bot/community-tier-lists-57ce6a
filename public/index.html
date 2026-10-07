@@ -320,6 +320,13 @@
     .illo { display: inline-grid; place-items: center; flex: none; }
     .illo img { width: 100%; height: 100%; display: block; object-fit: contain; pointer-events: none; -webkit-user-drag: none; }
     .illo.photo img { object-fit: cover; border-radius: 12px; }
+    /* official logo / poster: shown as-is (no rotation, no restyling) on white */
+    .illo.official { background: #FFFFFF; border-radius: 10px; padding: 3px; box-shadow: 0 1px 4px var(--shadow-card); overflow: hidden; }
+    .illo.official img { object-fit: contain; }
+    /* name-only tile: the fallback when an item has no image or drawing */
+    .illo.nametile { border-radius: 12px; color: #1E1B18; padding: 4px; text-align: center; overflow: hidden;
+      font-family: 'Archivo Narrow', 'Arial Narrow', Archivo, sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: .01em; line-height: 1.05; }
+    .illo.nametile > span { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
     .illo.tile { border-radius: 14px; }
     .tabs { display: flex; gap: 16px; flex-wrap: wrap; }
     .tabs button { font-family: 'Instrument Serif', Georgia, serif; font-size: 21px; color: var(--ink-faint); min-height: 44px; }
@@ -368,7 +375,9 @@
     .bars5 i.lead { background: #1E1B18; }
     .bars5 span { font-size: 10px; text-align: center; display: block; width: 15px; color: rgba(30,27,24,.75); font-family: 'Instrument Serif', Georgia, serif; }
     .stk .by { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 13px; color: rgba(30,27,24,.75); }
-    .stk .go { position: absolute; right: 14px; bottom: 14px; background: #1E1B18; color: #FAF9F6; }
+    /* left-aligned in the card flow: the floating "+" sits bottom-right, so the
+       pill must never share that corner */
+    .stk .go { margin-top: 10px; background: #1E1B18; color: #FAF9F6; }
     .fab { position: fixed; right: max(20px, calc(50% - 288px + 20px)); bottom: calc(22px + env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 50%; background: var(--ink); color: var(--paper); font-size: 28px; display: grid; place-items: center; box-shadow: 0 8px 20px var(--shadow-drag); z-index: 30; }
     .act-line { font-family: 'Instrument Serif', Georgia, serif; font-size: 16px; line-height: 1.3; padding: 6px 0; display: block; width: 100%; text-align: left; min-height: 44px; }
     .act-line .dim { font-style: italic; color: var(--ink-soft); }

@@ -95,7 +95,7 @@ async function groupMemberIds(groupId) {
 
 async function activeItems(templateId, userId) {
   const { rows } = await pool.query(
-    `SELECT id::text AS id, name, canonical_key, emoji, image_url, status,
+    `SELECT id::text AS id, name, canonical_key, emoji, image_url, image_source, status,
             added_by_id, added_by_username, created_at
      FROM template_items
      WHERE template_id = $1 AND NOT hidden
@@ -162,8 +162,8 @@ async function previewItems(templateIds, limit) {
      FROM unnest($1::bigint[]) AS t(id)
      CROSS JOIN LATERAL (
        SELECT COALESCE(json_agg(json_build_object('id', i.id::text, 'name', i.name,
-                'canonical_key', i.canonical_key, 'image_url', i.image_url) ORDER BY i.id), '[]'::json) AS items
-       FROM (SELECT id, name, canonical_key, image_url FROM template_items
+                'canonical_key', i.canonical_key, 'image_url', i.image_url, 'image_source', i.image_source) ORDER BY i.id), '[]'::json) AS items
+       FROM (SELECT id, name, canonical_key, image_url, image_source FROM template_items
              WHERE template_id = t.id AND status = 'active' AND NOT hidden
              ORDER BY id LIMIT $2) i
      ) p`, [templateIds, limit]);

@@ -33,6 +33,9 @@
     { "name": "Rank tray is a bottom sheet", "path": "/t/900001", "expectSelector": "[data-tray-sheet]" },
     { "name": "Rank footer locks it in", "path": "/t/900001", "expectText": "Done when you are." },
     { "name": "Results grid tabs", "path": "/t/900001/results", "expectText": "Crowd" },
-    { "name": "Illustration sheet renders", "path": "/illustrations", "expectSelector": "[data-illo-sheet] [data-illo] img" }
+    { "name": "Illustration sheet renders", "path": "/illustrations", "expectSelector": "[data-illo-sheet] [data-illo] img" },
+    { "name": "Crypto items show their official logo", "path": "/t/3", "expectSelector": ".illo.official img[src*='coingecko']" },
+    { "name": "Countries show their flag", "path": "/t/5", "expectSelector": "[data-illo='brazil'] img" },
+    { "name": "Items without art show a name tile", "path": "/t/9", "expectSelector": ".illo.nametile" }
   ]
 }
