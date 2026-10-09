@@ -7,8 +7,10 @@
   if (params.get('token')) sessionStorage.setItem('ctl_token', params.get('token'));
   const TOKEN = params.get('token') || sessionStorage.getItem('ctl_token') || '';
 
-  // Fixed warm→cool ramp by tier position; letters always accompany color.
-  const RAMP = ['#E4573D', '#E5A83B', '#7FB542', '#3F97E8', '#8A6FDF', '#6B7A99'];
+  // Fixed pastel ramp by tier position; letters (ink, never white) always
+  // accompany colour. Not themed — html.dark dims the blocks via CSS.
+  const RAMP = ['#E9A28C', '#EDCB80', '#BACB96', '#AFC6DB', '#CDB9DA', '#C9C6BE'];
+  const TIER_INK = '#1E1B18';
   const tierColor = (idx) => RAMP[Math.min(idx, RAMP.length - 1)];
 
   const $app = document.getElementById('app');
@@ -130,10 +132,10 @@
   function header(title, opts = {}) {
     const back = opts.back === false ? '' :
       `<button data-nav="${esc(opts.back || '/')}" class="un-touch-target text-xl font-bold px-1" style="color:var(--link)" aria-label="Back">←</button>`;
-    return `<header class="sticky top-0 z-20 un-safe-top" style="background:var(--header-bg);backdrop-filter:blur(8px);border-bottom:2px solid var(--header-rule)">
+    return `<header class="sticky top-0 z-20 un-safe-top" style="background:var(--header-bg);backdrop-filter:blur(8px)">
       <div class="max-w-xl mx-auto flex items-center gap-2 px-3 h-12">
         ${back}
-        <div class="font-display font-black text-[17px] truncate">${title}</div>
+        <div class="font-display text-[21px] truncate">${title}</div>
         <div class="ml-auto flex items-center gap-1">${opts.actions || ''}</div>
       </div>
     </header>`;
@@ -141,6 +143,92 @@
 
   function screen(html) {
     $app.innerHTML = html;
+    hydrateIllos($app);
+  }
+
+  // ---------- item visuals ----------
+  // Every item renders as exactly one of:
+  //   photo    — an image someone uploaded for the item (image_url, no source)
+  //   official — the brand's logo / the show's poster (image_url + image_source,
+  //              seeded from seeds/item-images.js); shown as-is, never restyled
+  //   drawing  — its own gouache drawing in public/illustrations.js
+  //   name     — a clean name-only tile in the item's tint
+  // There are deliberately no category stand-ins: an item never shows a
+  // drawing of something it isn't.
+  const I = window.Illos;
+  const reducedMotion = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  function visualOf(it) {
+    if (!it) return { kind: 'name' };
+    if (it.image_url) return { kind: it.image_source ? 'official' : 'photo', url: it.image_url };
+    const key = I.keyFor(it);
+    return key ? { kind: 'drawing', key } : { kind: 'name' };
+  }
+
+  // Name tile text: the whole name when there's room, else the initial.
+  function nameTileHtml(it, w, h, extraStyle = '') {
+    const name = (it && it.name) || '';
+    const small = w <= 34;
+    const longest = Math.max(1, ...name.split(/\s+/).map((x) => x.length));
+    // fit the longest word on one line (condensed caps ≈ 0.55em per letter)
+    const fs = small ? Math.round(w * 0.5)
+      : Math.max(8, Math.min(Math.round(w * (name.length <= 10 ? 0.2 : name.length <= 20 ? 0.165 : 0.14)), Math.floor((w - 8) / (longest * 0.56))));
+    return `<span class="illo nametile" style="width:${w}px;height:${h}px;background:${I.tintFor(it ? it.id : name)};${extraStyle}">`
+      + `<span style="font-size:${fs}px">${esc(small ? name.trim().charAt(0) : name)}</span></span>`;
+  }
+
+  function illoHtml(it, size, _category, extraStyle = '') {
+    const v = visualOf(it);
+    if (v.kind === 'photo') {
+      return `<span class="illo photo" style="width:${size}px;height:${size}px;${extraStyle}"><img src="${esc(v.url)}" alt=""></span>`;
+    }
+    if (v.kind === 'official') {
+      return `<span class="illo official" data-iname="${esc(it.name)}" data-iid="${esc(it.id)}" style="width:${size}px;height:${size}px"><img src="${esc(v.url)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
+    }
+    if (v.kind === 'name') return nameTileHtml(it, size, size);
+    const url = I.cached(v.key, size);
+    return `<span class="illo" data-illo="${v.key}" data-isz="${size}" style="width:${size}px;height:${size}px;${extraStyle}">${url ? `<img src="${url}" alt="">` : ''}</span>`;
+  }
+
+  // Visual + caption. A name tile already carries the name, so it takes the
+  // caption's space instead of repeating it.
+  function figInner(it, size, extraCap = '') {
+    const v = visualOf(it);
+    if (v.kind === 'name') return nameTileHtml(it, size + 18, size + 14) + (extraCap ? `<span class="cap">${extraCap.replace(/^ · /, '')}</span>` : '');
+    const style = v.kind === 'drawing' ? `transform:rotate(${I.rotFor(it.id)}deg)` : '';
+    return `${illoHtml(it, size, null, style)}<span class="cap">${esc(it.name)}${extraCap}</span>`;
+  }
+
+  function figHtml(it, size, _category, opts = {}) {
+    return `<span class="fig ${opts.cls || ''}" style="${opts.style || ''}">${figInner(it, size)}</span>`;
+  }
+
+  // An official image that fails to load becomes the item's name tile, never
+  // a broken-image icon.
+  document.addEventListener('error', (e) => {
+    const img = e.target;
+    const box = img && img.tagName === 'IMG' && img.parentElement && img.parentElement.closest('.illo.official');
+    if (!box) return;
+    const w = box.offsetWidth || parseInt(box.style.width, 10) || 44;
+    box.outerHTML = nameTileHtml({ id: box.dataset.iid, name: box.dataset.iname }, w, w);
+  }, true);
+
+  function hydrateIllos(rootEl) {
+    (rootEl || document).querySelectorAll('[data-illo]').forEach((el) => {
+      if (el.querySelector('img')) return;
+      I.load(el.dataset.illo, parseInt(el.dataset.isz, 10)).then((url) => {
+        if (url && el.isConnected && !el.querySelector('img')) el.innerHTML = `<img src="${url}" alt="">`;
+      });
+    });
+  }
+
+  // Warm the cache for a list's items before its screen paints.
+  function prewarm(items, _category, size) {
+    return Promise.all((items || []).map(visualOf).filter((v) => v.kind === 'drawing').map((v) => I.load(v.key, size)));
+  }
+
+  function topbar(left, right) {
+    return `<div class="topbar">${left || '<span></span>'}${right || '<span></span>'}</div>`;
   }
 
   function renderError(err) {
@@ -173,6 +261,7 @@
     [/^\/g\/(\d+)$/, renderGroup],
     [/^\/me$/, renderMe],
     [/^\/mod$/, renderMod],
+    [/^\/illustrations$/, renderIllustrations],
   ];
 
   async function route() {
@@ -194,8 +283,8 @@
     return homeCache;
   }
 
-  const tierLetterChip = (labels, tier) => tier == null ? '<span class="badge" style="background:var(--tint-neutral-bg);color:var(--tint-neutral-fg)">skip</span>'
-    : `<span class="badge" style="background:${tierColor(tier - 1)};color:#fff">${esc(labels[tier - 1] || tier)}</span>`;
+  const tierLetterChip = (labels, tier) => tier == null ? '<span class="tchip" style="background:var(--tint-neutral-bg);color:var(--tint-neutral-fg)">skip</span>'
+    : `<span class="tchip" style="background:${tierColor(tier - 1)}">${esc(labels[tier - 1] || tier)}</span>`;
 
   // "6 exact · 1 one tier off · 1 clash" — the disagreements behind the
   // headline %, always rendered so a high score can't hide them (issue #14).
@@ -219,69 +308,121 @@
 
   // ---------- Home ----------
 
+  const homeUi = { tab: 'trending' };
+
+  // Today's List closes at the next UTC midnight after its run date.
+  function closesIn(runDate) {
+    if (!runDate) return '';
+    const ms = Date.parse(runDate + 'T00:00:00Z') + 864e5 - Date.now();
+    if (ms <= 0) return 'closing now';
+    const hrs = Math.floor(ms / 36e5);
+    return hrs >= 1 ? `closes in ${hrs}h` : `closes in ${Math.max(1, Math.ceil(ms / 6e4))}m`;
+  }
+
+  const ctaFor = (myStatus) => myStatus === 'submitted' ? 'See the results' : myStatus === 'draft' ? 'Resume' : 'Rank now';
+
+  // Scatter slots for the hero composition: [left fraction, top px].
+  const SCATTER = [[0, 6], [0.16, 44], [0.33, 0], [0.5, 40], [0.66, 6], [0.83, 44], [1, 2]];
+
   async function renderHome() {
     loading('Tier Lists');
     const h = await getHome(true);
+    const today = h.today;
+    if (today) await Promise.race([prewarm(today.preview, today.category, 52), new Promise((r) => setTimeout(r, 600))]);
+
     const stagingPill = h.env === 'staging'
       ? '<span class="badge" style="background:var(--tint-warn-bg);color:var(--tint-warn-fg);border:1px solid var(--tint-warn-line)">staging</span>' : '';
-    const modBtn = h.me.is_moderator
-      ? '<button data-nav="/mod" class="un-touch-target text-lg" aria-label="Moderation">🛡️</button>' : '';
+
+    const nav = `<nav class="hm-nav pt-3" aria-label="Home sections">
+      <div class="links">
+        <button class="on" data-scroll="top" aria-current="page">Lists</button>
+        <button data-scroll="groups">Groups</button>
+        <button data-scroll="activity">Activity</button>
+        ${h.me.is_moderator ? '<button data-nav="/mod">Mod</button>' : ''}
+      </div>
+      <div class="flex items-center gap-2">${stagingPill}<button data-nav="/me" class="serif text-[19px] un-touch-target">Profile</button></div>
+    </nav>`;
 
     let hero = '';
-    if (h.today) {
-      const cta = h.today.my_status === 'submitted' ? 'See the results'
-        : h.today.my_status === 'draft' ? 'Resume ranking' : 'Rank it';
-      const dest = h.today.my_status === 'submitted' ? `/t/${h.today.template_id}/results` : `/t/${h.today.template_id}`;
-      hero = `<section class="card p-4 mb-4" style="background:var(--hero-grad);border-color:var(--card-line-hover)">
-        <div class="text-[11px] font-bold uppercase tracking-widest" style="color:var(--accent)">Today's List · No. ${h.today.edition_no}</div>
-        <div class="font-display font-black text-2xl mt-1">${esc(h.today.title)}</div>
-        <div class="text-sm mt-1" style="color:var(--ink-soft)">${h.today.n} ranked so far${h.today.my_status === 'submitted' ? ' · yours is in ✓' : ''}</div>
-        <button data-nav="${dest}" class="btn-primary mt-3">${cta}</button>
+    if (today) {
+      const cta = today.my_status === 'submitted' ? 'See the results' : today.my_status === 'draft' ? 'Resume' : 'Rank';
+      const dest = templateDest(today.template_id, today.my_status);
+      const animate = !reducedMotion();
+      const figs = (today.preview || []).slice(0, 7).map((it, i) => {
+        const [fx, top] = SCATTER[i];
+        return figHtml(it, 52, today.category, {
+          cls: animate ? 'reveal' : '',
+          style: `left:calc((100% - 64px) * ${fx});top:${top}px;${animate ? `animation-delay:${i * 60}ms;` : ''}`,
+        });
+      }).join('');
+      hero = `<section class="hero mt-4" aria-label="Today's list">
+        <h2 class="cond ht">${esc(today.title)}</h2>
+        <div class="ed kicker">Today's list / No. ${today.edition_no}</div>
+        <div class="scatter">${figs}</div>
+        <div class="meta kicker">${today.item_count} items · ${closesIn(today.run_date)} · ${today.n} ranked so far${today.my_status === 'submitted' ? ' · yours is in' : ''}</div>
+        <button data-nav="${dest}" class="circle" style="${cta.length > 8 ? 'font-size:16px' : ''}">${cta}</button>
       </section>`;
     }
 
-    const changing = h.changing.length ? `<section class="mb-4">
-      <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">What's changing</div>
-      ${h.changing.map((c) => `<div class="card px-3 py-2 mb-1 text-[13px]"><b>${esc(c.title)}</b>${c.body ? ` — <span style="color:var(--ink-soft)">${esc(c.body)}</span>` : ''}</div>`).join('')}
-    </section>` : '';
+    const draft = h.in_progress[0];
+    const contCard = draft ? `<button data-nav="/t/${draft.template_id}" class="cont-card un-pressable" aria-label="Continue ${esc(draft.title)}, ${draft.placed} of ${draft.total} placed">
+        <div class="flex items-start gap-2">
+          <span class="min-w-0 flex-1"><span class="kicker text-[12px] block">Continue</span><span class="cond text-[15px] leading-tight block">${esc(draft.title)}</span></span>
+          ${illoHtml((draft.preview || [])[0], 36, draft.category)}
+        </div>
+        <div class="progline mt-3 mb-1" style="margin-right:56px"><i style="width:${draft.total ? Math.round(draft.placed / draft.total * 100) : 0}%"></i></div>
+        <div class="text-[12px]" style="color:var(--ink-soft)">${draft.placed} of ${draft.total} placed</div>
+        <span class="circle md" aria-hidden="true">Resume</span>
+      </button>` : '';
+    const g0 = h.groups[0];
+    const grpCard = `<button ${g0 ? `data-nav="/g/${g0.id}"` : 'data-newgroup="1"'} class="grp-card un-pressable">
+        <span class="kicker text-[12px] block">Groups</span>
+        ${g0 ? `<span class="serif text-[17px] leading-tight block">${esc(g0.name)}</span>
+          <span class="text-[12px] block mt-1" style="color:var(--ink-soft)">${g0.member_count} member${g0.member_count === 1 ? '' : 's'}${h.groups.length > 1 ? ` · +${h.groups.length - 1} more` : ''}</span>`
+        : '<span class="serif text-[16px] leading-tight block">Start a private list with friends</span>'}
+      </button>`;
 
-    const inprog = h.in_progress.length ? `<section class="mb-4">
-      <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">In progress</div>
-      ${h.in_progress.map((r) => `<button data-nav="/t/${r.template_id}" class="card card-tap w-full text-left px-3 py-2 mb-1 text-sm un-pressable flex items-center gap-2">
-        <span class="flex-1 min-w-0"><b>${esc(r.title)}</b> — ${r.placed} of ${r.total} placed · <span style="color:var(--accent)">resume</span></span>${CHEV}</button>`).join('')}
-    </section>` : '';
+    const tabs = [['trending', 'Trending', h.feed.length], ['progress', 'In progress', h.in_progress.length], ['yours', 'Yours', null]];
+    const tabsHtml = `<div class="tabs mt-5" role="tablist" aria-label="Lists">${tabs.map(([k, label, n]) =>
+      `<button role="tab" data-tab="${k}" aria-selected="${homeUi.tab === k}">${label}${n != null ? `<sup class="cnt">(${n})</sup>` : ''}</button>`).join('')}</div>`;
 
-    const groups = `<section class="mb-4">
-      <div class="flex items-center mb-1">
-        <div class="text-[11px] font-bold uppercase tracking-widest" style="color:var(--ink-soft)">My groups</div>
-        <button id="new-group" class="ml-auto text-[12px] font-bold" style="color:var(--accent)">+ new group</button>
-      </div>
-      ${h.groups.length ? h.groups.map((g) => `<button data-nav="/g/${g.id}" class="card card-tap w-full text-left px-3 py-2 mb-1 text-sm un-pressable flex items-center gap-2">
-        <span class="flex-1 min-w-0"><b>${esc(g.name)}</b> · ${g.member_count} member${g.member_count === 1 ? '' : 's'}${g.recent ? ` · <span style="color:var(--accent)">${g.recent} new ranking${g.recent === 1 ? '' : 's'}</span>` : ''}</span>${CHEV}</button>`).join('')
-      : '<div class="card px-3 py-3 text-sm" style="color:var(--ink-soft)">Run private lists with friends — restaurants, crags, whatever you argue about.</div>'}
+    const activity = `<section id="activity">
+      <h2 class="sec-h">Activity</h2>
+      ${h.changing.map((c) => `<div class="act-line"><span>${esc(c.title)}</span>${c.body ? `<span class="dim">: ${esc(c.body)}</span>` : ''}</div>`).join('')}
+      ${h.recent_rankings.map((r) => `<button data-nav="${templateDest(r.template_id, r.my_status)}" class="act-line un-pressable"><span>${esc(r.username)}</span> <span class="dim">ranked “${esc(r.title)}”</span></button>`).join('')}
+      ${!h.changing.length && !h.recent_rankings.length ? '<div class="act-line dim">Quiet so far.</div>' : ''}
     </section>`;
 
-    const feed = `<section class="mb-4">
-      <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Feed · trending &amp; recent</div>
-      ${h.feed.map((t) => `<button data-nav="${templateDest(t.id, t.my_status)}" class="card card-tap w-full text-left px-3 py-2 mb-1 un-pressable flex items-center gap-2">
-        <span class="flex-1 min-w-0 block">
-          <span class="block text-sm font-bold truncate">${t.recent_n >= 3 ? '🔥 ' : ''}${esc(t.title)}</span>
-          <span class="block text-[12px] truncate" style="color:var(--ink-soft)">${t.n} ranking${t.n === 1 ? '' : 's'}${t.category ? ' · ' + esc(t.category) : ''} · by ${esc(t.author_username)}</span>
-        </span>${statusPill(t.my_status)}${CHEV}
-      </button>`).join('') || '<div class="card px-3 py-3 text-sm" style="color:var(--ink-soft)">Nothing here yet — create the first list!</div>'}
-      ${h.recent_rankings.map((r) => `<button data-nav="${templateDest(r.template_id, r.my_status)}" class="w-full text-left px-3 py-1.5 text-[12.5px] un-pressable flex items-center gap-2" style="color:var(--ink-soft)">
-        <span class="flex-1 min-w-0 truncate"><b>${esc(r.username)}</b> ranked “${esc(r.title)}”</span>${CHEV}</button>`).join('')}
+    const groups = `<section id="groups">
+      <div class="flex items-baseline"><h2 class="sec-h">Groups</h2><button data-newgroup="1" class="linkish ml-auto text-[15px]">+ new group</button></div>
+      ${h.groups.length ? h.groups.map((g) => `<button data-nav="/g/${g.id}" class="act-line un-pressable"><span>${esc(g.name)}</span> <span class="dim">· ${g.member_count} member${g.member_count === 1 ? '' : 's'}${g.recent ? ` · ${g.recent} new ranking${g.recent === 1 ? '' : 's'}` : ''}</span></button>`).join('')
+      : '<div class="act-line dim">Run private lists with friends: restaurants, crags, whatever you argue about.</div>'}
     </section>`;
 
-    screen(`${header(`Tier Lists ${stagingPill}`, {
-      back: false,
-      actions: `${modBtn}<button data-nav="/new" class="un-touch-target text-xl font-black" aria-label="New template" style="color:var(--accent)">＋</button>
-        <button data-nav="/me" class="un-touch-target text-lg" aria-label="Profile">👤</button>`,
-    })}
-    <main class="max-w-xl mx-auto p-4 un-safe-bottom">${hero}${changing}${inprog}${groups}${feed}</main>`);
+    screen(`<main class="max-w-xl mx-auto px-4 pb-28 un-safe-top un-safe-bottom" id="home-top">
+      ${nav}
+      ${tabsHtml}
+      ${hero}
+      <div class="row2 mt-3">${contCard}${grpCard}</div>
+      <section id="lists-panel" class="mt-6" role="tabpanel"></section>
+      ${groups}
+      ${activity}
+    </main>
+    <button data-nav="/new" class="fab un-pressable" aria-label="New list">＋</button>`);
 
-    const ng = document.getElementById('new-group');
-    if (ng) ng.addEventListener('click', async () => {
+    drawHomePanel(h);
+
+    document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
+      homeUi.tab = b.dataset.tab;
+      document.querySelectorAll('[data-tab]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+      drawHomePanel(h);
+    }));
+    document.querySelectorAll('[data-scroll]').forEach((b) => b.addEventListener('click', () => {
+      const id = b.dataset.scroll;
+      if (id === 'top') window.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' });
+      else document.getElementById(id).scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth' });
+    }));
+    document.querySelectorAll('[data-newgroup]').forEach((b) => b.addEventListener('click', async () => {
       const name = await askText({ title: 'New group', placeholder: 'Group name', confirmLabel: 'Create' });
       if (!name) return;
       try {
@@ -289,7 +430,80 @@
         toast('Group created');
         nav('/g/' + g.id);
       } catch (err) { toast(err.message); }
-    });
+    }));
+  }
+
+  // The "All lists" stack for the active tab. Cards overlap; tapping a strip
+  // opens that card with a spring (cards above collapse to slivers).
+  function drawHomePanel(h) {
+    const panel = document.getElementById('lists-panel');
+    if (!panel) return;
+    let rows, empty;
+    if (homeUi.tab === 'progress') {
+      rows = h.in_progress.map((r) => ({ ...r, id: r.template_id, my_status: 'draft', nr: `${r.placed} of ${r.total}` }));
+      empty = 'Nothing in progress. Start a list and it waits for you here.';
+    } else if (homeUi.tab === 'yours') {
+      rows = h.mine || [];
+      empty = "You haven't ranked or made a list yet.";
+    } else {
+      rows = h.feed;
+      empty = 'Nothing here yet. Create the first list!';
+    }
+    if (!rows.length) { panel.innerHTML = `<div class="act-line dim kicker">${empty}</div>`; return; }
+
+    panel.innerHTML = `<div class="stack">${rows.map((t, i) => {
+      const pv = t.preview || [];
+      const nr = t.nr || `${t.n} ranked`;
+      return `<article class="stk" data-stk="${i}" data-tid="${t.id}" style="background:${I.tintFor(t.id)}">
+        <button class="stk-strip" aria-expanded="false" aria-controls="stkb-${i}" aria-label="${esc(t.title)}, ${esc(nr)}">
+          <span class="stk-ic">${illoHtml(pv[0], 28)}</span>
+          <span class="min-w-0 flex-1"><span class="cat">${esc(t.category || 'Lists')}</span><span class="tt cond truncate">${esc(t.title)}</span></span>
+          <span class="nr">${esc(nr)}</span>
+        </button>
+        <div class="stk-body" id="stkb-${i}"><div><div class="stk-inner">
+          <div class="figs">${pv.slice(0, 3).map((it) => figHtml(it, 46, t.category)).join('')}</div>
+          <div class="bars5" data-bars="${t.id}" aria-hidden="true"></div>
+          <div class="by">${t.author_username ? 'by ' + esc(t.author_username) : ''}</div>
+          <button class="pill go" data-nav="${templateDest(t.id, t.my_status)}">${ctaFor(t.my_status)}</button>
+        </div></div></div>
+      </article>`;
+    }).join('')}</div>`;
+    hydrateIllos(panel);
+
+    const cards = Array.from(panel.querySelectorAll('.stk'));
+    const open = (idx) => {
+      cards.forEach((c, j) => {
+        c.classList.toggle('is-open', j === idx);
+        c.classList.toggle('is-sliver', idx != null && j < idx);
+        c.querySelector('.stk-strip').setAttribute('aria-expanded', String(j === idx));
+      });
+      if (idx != null) loadStackBars(cards[idx], rows[idx]);
+    };
+    cards.forEach((c, j) => c.querySelector('.stk-strip').addEventListener('click', () =>
+      open(c.classList.contains('is-open') ? null : j)));
+    // Default-open the first list you haven't ranked yet — the pull-in.
+    const first = rows.findIndex((t) => t.my_status !== 'submitted');
+    open(first === -1 ? 0 : first);
+  }
+
+  // 5-bar chart of where every vote on the list lands (lazy, once per card).
+  async function loadStackBars(card, t) {
+    const el = card.querySelector('[data-bars]');
+    if (!el || el.dataset.loaded) return;
+    el.dataset.loaded = '1';
+    try {
+      const agg = await api(`/api/templates/${t.id}/aggregate`);
+      const labels = t.tier_labels || ['S', 'A', 'B', 'C', 'D'];
+      const totals = labels.map(() => 0);
+      for (const a of Object.values(agg.items)) (a.dist || []).forEach((c, i) => { if (i < totals.length) totals[i] += c; });
+      const max = Math.max(...totals);
+      if (!max) { el.outerHTML = '<div class="by" style="margin:4px 0 8px">No rankings yet. Be the first.</div>'; return; }
+      const lead = totals.indexOf(max);
+      el.setAttribute('aria-hidden', 'false');
+      el.setAttribute('aria-label', 'Votes by tier: ' + labels.map((l, i) => `${l} ${totals[i]}`).join(', '));
+      el.innerHTML = labels.map((l, i) => `<div style="display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+        <i class="${i === lead ? 'lead' : ''}" style="height:${Math.max(2, Math.round(totals[i] / max * 22))}px"></i><span>${esc(String(l).slice(0, 2))}</span></div>`).join('');
+    } catch { el.remove(); }
   }
 
   async function renderToday() {
@@ -300,7 +514,7 @@
 
   // ---------- Rank screen ----------
 
-  const rankState = { id: null, data: null, placements: null, sel: null, saveTimer: null, saveNote: '' };
+  const rankState = { id: null, data: null, placements: null, sel: null, saveTimer: null, saveNote: '', trayCollapsed: false };
 
   async function renderRank(id) {
     loading('…');
@@ -317,6 +531,7 @@
     rankState.placements = Object.assign({}, data.my.placements);
     rankState.sel = null;
     rankState.saveNote = '';
+    await Promise.race([prewarm(data.items, t.category, 44), new Promise((r) => setTimeout(r, 800))]);
     drawRank();
   }
 
@@ -327,19 +542,22 @@
     const items = data.items;
     const byId = {};
     for (const it of items) byId[it.id] = it;
+    const selItem = sel && byId[sel];
 
-    const chipHtml = (it, extra = '') => `<button class="chip ${sel === it.id ? 'selected' : ''}" data-item="${it.id}" ${extra}>
-      ${it.image_url ? `<img src="${esc(it.image_url)}" alt="">` : ''}${it.emoji ? esc(it.emoji) + ' ' : ''}${esc(it.name)}
-      ${it.is_new ? '<span class="badge" style="background:var(--tint-accent-bg);color:var(--tint-accent-fg)">NEW</span>' : ''}
-      ${it.status === 'proposed' ? '<span class="badge" style="background:var(--tint-warn-bg);color:var(--tint-warn-fg)">only you</span>' : ''}
+    const tileHtml = (it) => `<button class="fig itile ${sel === it.id ? 'selected' : ''}" data-item="${it.id}" aria-pressed="${sel === it.id}"
+        aria-label="${esc(it.name)}${it.status === 'proposed' ? ' (only you)' : ''}${it.is_new ? ' (new)' : ''}">
+      ${figInner(it, 44)}
+      ${it.status === 'proposed' ? '<span class="flag">only you</span>' : it.is_new ? '<span class="flag">NEW</span>' : ''}
     </button>`;
 
     const rows = labels.map((label, i) => {
       const tier = i + 1;
       const inTier = items.filter((it) => placements[it.id] === tier);
-      return `<div class="tier-row mb-1.5" data-tier-row="${tier}">
-        <div class="tier-label" style="background:${tierColor(i)}">${esc(label)}</div>
-        <div class="tier-items" data-tier="${tier}">${inTier.map((it) => chipHtml(it)).join('')}</div>
+      return `<div class="tier-row mb-2" data-tier-row="${tier}">
+        <button class="tblock ${String(label).length > 2 ? 'small' : ''}" style="background:${tierColor(i)}" data-place-tier="${tier}"
+          aria-label="${selItem ? `Place ${esc(selItem.name)} in ${esc(label)}` : `Tier ${esc(label)}`}">${esc(label)}</button>
+        <div class="tier-items ${inTier.length ? '' : 'empty'} ${selItem ? 'placeable' : ''}" data-zone="1" data-tier="${tier}">${inTier.map(tileHtml).join('')
+          || `<span class="kicker text-[13.5px]">${selItem ? `Place ${esc(selItem.name.toLowerCase())} here` : 'Drop here'}</span>`}</div>
       </div>`;
     }).join('');
 
@@ -348,76 +566,96 @@
     const placedCount = items.length - trayItems.length - skipped.length;
     const canSubmit = placedCount >= 1;
     const submitted = data.my.status === 'submitted';
+    const pct = items.length ? Math.round((placedCount + skipped.length) / items.length * 100) : 0;
 
-    const placer = sel && byId[sel] ? `<div class="card p-3 mt-2" id="placer">
-      <div class="text-[12px] font-bold mb-2">Place “${esc(byId[sel].name)}”</div>
-      <div class="flex flex-wrap gap-2">
-        ${labels.map((l, i) => `<button class="tier-label un-pressable" data-place="${i + 1}" style="background:${tierColor(i)};min-height:44px">${esc(l)}</button>`).join('')}
-        <button data-place="skip" class="un-pressable px-3 rounded-[10px] border font-bold text-sm" style="border-color:var(--line);min-height:44px">Skip — haven't seen it</button>
-        ${(sel in placements) ? '<button data-place="tray" class="un-pressable px-3 rounded-[10px] border font-bold text-sm" style="border-color:var(--line);min-height:44px">↩ Back to tray</button>' : ''}
-      </div>
+    const hint = selItem ? `<div class="hintbar mt-2" id="placer" role="status">
+      <span>${esc(selItem.name)} picked. Tap a tier, or drag it there.</span>
+      <button data-place="skip" class="linkish">skip (haven't seen it)</button>
+      ${(sel in placements) ? '<button data-place="tray" class="linkish">back to the tray</button>' : ''}
     </div>` : '';
 
-    screen(`${header(esc(t.title), {
-      back: '/',
-      actions: `<button id="report-t" class="un-touch-target text-[12px] font-bold" style="color:var(--ink-soft)">report</button>`,
-    })}
-    <main class="max-w-xl mx-auto p-4 pb-10 un-safe-bottom">
-      ${data.daily ? `<div class="text-[11px] font-bold uppercase tracking-widest mb-2" style="color:var(--accent)">Today's List · No. ${data.daily.edition_no}${data.daily.is_final ? ' · final' : ''}</div>` : ''}
-      <div class="text-[13px] mb-3" style="color:var(--ink-soft)">
-        ${submitted ? 'You’ve ranked this — edits update the community aggregate live.' :
-          `Aggregate hidden until you rank — ${placedCount} of ${items.length} placed${skipped.length ? `, ${skipped.length} skipped` : ''}.`}
-        <span class="font-semibold">${esc(rankState.saveNote)}</span>
+    const policy = t.item_policy === 'closed' ? 'Items you add stay in your ranking only.'
+      : t.item_policy === 'approved' ? 'Items you add are shared once the author approves.' : '';
+
+    screen(`<main class="max-w-xl mx-auto px-4 un-safe-top">
+      ${topbar('<button data-nav="/">Close</button>', '<button id="report-t" class="dim">Report</button>')}
+      <div class="text-center">
+        <h1 class="cond text-[26px] leading-tight">${esc(t.title)}</h1>
+        <div class="rk-pairs"><span><span class="k">List /</span> ${data.daily ? `Today's No. ${data.daily.edition_no}${data.daily.is_final ? ' · final' : ''}` : 'Feed'}</span>
+          <span><span class="k">Placed /</span> ${placedCount} of ${items.length}</span></div>
+        <div class="progline mx-auto mt-2" style="width:180px"><i style="width:${pct}%"></i></div>
+        <div class="kicker text-[13px] mt-1">${submitted ? "Edits update the crowd's grid live" : "The crowd's grid stays hidden until you rank"}${skipped.length ? ` · ${skipped.length} skipped` : ''}
+          <span id="save-note" class="not-italic">${esc(rankState.saveNote)}</span></div>
       </div>
-      <div id="board">${rows}</div>
-      ${placer}
-      <div class="card p-3 mt-3">
-        <div class="text-[12px] font-bold mb-2" style="color:var(--ink-soft)">ITEM TRAY — drag into a tier, or tap to place · unplaced items are skipped when you submit</div>
-        <div class="tier-items" data-tray="1" style="border-style:dashed;min-height:56px">${trayItems.map((it) => chipHtml(it)).join('') || '<span class="text-[12.5px] py-1.5" style="color:var(--ink-soft)">All items placed or skipped 🎉</span>'}</div>
-      </div>
-      ${skipped.length ? `<div class="card p-3 mt-2">
-        <div class="text-[12px] font-bold mb-2" style="color:var(--ink-soft)">SKIPPED (${skipped.length}) — not counted in the aggregate</div>
-        <div class="tier-items" data-skipshelf="1">${skipped.map((it) => chipHtml(it)).join('')}</div>
+      <div id="board" class="mt-4">${rows}</div>
+      ${hint}
+      ${skipped.length ? `<div class="mt-3">
+        <div class="kicker text-[13px] mb-1">Skipped (${skipped.length}): not counted in the aggregate</div>
+        <div class="tier-items" data-zone="1" data-skipshelf="1" style="background:transparent;border:1.5px dashed var(--drop-line)">${skipped.map(tileHtml).join('')}</div>
       </div>` : ''}
-      <div class="mt-3">
-        <button id="add-item" class="text-[13px] font-bold" style="color:var(--accent)">+ add an item${t.item_policy === 'closed' ? ' (stays in your ranking only)' : t.item_policy === 'approved' ? ' (author approves before it’s shared)' : ''}</button>
-      </div>
       ${data.proposals && data.proposals.length ? `<div class="card p-3 mt-3">
-        <div class="text-[12px] font-bold mb-2">Proposed items (you're the author)</div>
-        ${data.proposals.map((p) => `<div class="flex items-center gap-2 text-sm py-1">
+        <div class="serif text-[17px] mb-1">Proposed items <span class="kicker text-[13px]">(you're the author)</span></div>
+        ${data.proposals.map((p) => `<div class="flex items-center gap-2 text-sm">
           <span class="flex-1">${esc(p.name)} <span style="color:var(--ink-soft)">by ${esc(p.added_by_username || '?')}</span></span>
-          <button data-decide="${p.id}:1" class="font-bold text-[12px]" style="color:var(--ok-fg)">approve</button>
-          <button data-decide="${p.id}:0" class="font-bold text-[12px]" style="color:var(--danger-fg)">reject</button>
+          <button data-decide="${p.id}:1" class="linkish" style="color:var(--ok-fg)">approve</button>
+          <button data-decide="${p.id}:0" class="linkish" style="color:var(--danger-fg)">reject</button>
         </div>`).join('')}
       </div>` : ''}
-      <button id="submit-btn" class="btn-primary mt-4" ${canSubmit ? '' : 'disabled'}>${submitted ? 'SAVE CHANGES' : 'SUBMIT RANKING'}</button>
-      ${canSubmit && trayItems.length ? `<div class="text-[12px] mt-1.5 text-center" style="color:var(--ink-soft)">${trayItems.length} item${trayItems.length === 1 ? '' : 's'} still in the tray — they'll be marked as skipped when you submit.</div>` : ''}
-      ${!canSubmit ? `<div class="text-[12px] mt-1.5 text-center" style="color:var(--ink-soft)">Rank at least one item to submit.</div>` : ''}
-      <div class="text-center mt-3">
-        <button data-nav="/t/${t.id}/results" class="text-[13.5px] font-semibold" style="color:var(--ink-soft)">just show me the results → <span class="text-[11px]">(peek — ranking stays open)</span></button>
-      </div>
+      <section class="tray ${rankState.trayCollapsed ? 'collapsed' : ''}" data-tray-sheet aria-label="Item tray">
+        <button class="grab" id="tray-grab" aria-expanded="${!rankState.trayCollapsed}" aria-label="${rankState.trayCollapsed ? 'Show' : 'Hide'} the item tray"><i></i></button>
+        <div class="flex items-baseline gap-2 flex-wrap">
+          <span class="serif text-[19px]">Item tray<sup class="cnt">(${trayItems.length})</sup></span>
+          <span class="kicker text-[12.5px]">unplaced items are skipped</span>
+          <button id="add-item" class="linkish ml-auto text-[14px]">+ add an item</button>
+        </div>
+        ${policy ? `<div class="tray-sub kicker text-[12px]">${policy}</div>` : ''}
+        <div class="tray-grid tier-items ${trayItems.length ? '' : 'empty'}" data-zone="1" data-tray="1" style="background:transparent">${trayItems.map(tileHtml).join('')
+          || '<span class="kicker text-[13.5px] block py-2">Every item is placed or skipped.</span>'}</div>
+        <div class="rk-foot">
+          <div class="min-w-0">
+            <div class="serif text-[20px] leading-tight">Done when you are.</div>
+            <button data-nav="/t/${t.id}/results" class="linkish text-[14px]">Just peek at the results</button>
+            ${canSubmit && trayItems.length ? `<div class="text-[12px]" style="color:var(--ink-soft)">${trayItems.length} still in the tray. They'll be skipped when you lock it in.</div>` : ''}
+            ${!canSubmit ? '<div class="text-[12px]" style="color:var(--ink-soft)">Rank at least one item to submit.</div>' : ''}
+          </div>
+          <button id="submit-btn" class="circle" ${canSubmit ? '' : 'disabled'}>${submitted ? 'Save<br>changes' : 'Lock it<br>in'}</button>
+        </div>
+      </section>
     </main>`);
 
     bindRank();
+  }
+
+  function placeSelected(v) {
+    const id = rankState.sel;
+    if (!id) return;
+    if (v === 'tray') delete rankState.placements[id];
+    else if (v === 'skip') rankState.placements[id] = null;
+    else rankState.placements[id] = parseInt(v, 10);
+    rankState.sel = null;
+    drawRank();
+    scheduleSave();
   }
 
   function bindRank() {
     const { data } = rankState;
     const t = data.template;
 
-    document.querySelectorAll('.chip[data-item]').forEach(attachChip);
+    document.querySelectorAll('.itile[data-item]').forEach(attachChip);
 
-    document.querySelectorAll('[data-place]').forEach((btn) => btn.addEventListener('click', () => {
-      const v = btn.getAttribute('data-place');
-      const id = rankState.sel;
-      if (!id) return;
-      if (v === 'tray') delete rankState.placements[id];
-      else if (v === 'skip') rankState.placements[id] = null;
-      else rankState.placements[id] = parseInt(v, 10);
-      rankState.sel = null;
-      drawRank();
-      scheduleSave();
+    document.querySelectorAll('[data-place]').forEach((btn) => btn.addEventListener('click', () => placeSelected(btn.getAttribute('data-place'))));
+    document.querySelectorAll('[data-place-tier]').forEach((btn) => btn.addEventListener('click', () => {
+      if (rankState.sel) placeSelected(btn.getAttribute('data-place-tier'));
     }));
+    // Tap-to-place: with an item picked, tapping anywhere on a tier row's
+    // drop area (not on another item) places it there.
+    document.querySelectorAll('[data-zone][data-tier]').forEach((zone) => zone.addEventListener('click', (e) => {
+      if (!rankState.sel || e.target.closest('.itile')) return;
+      placeSelected(zone.dataset.tier);
+    }));
+
+    const grab = document.getElementById('tray-grab');
+    if (grab) grab.addEventListener('click', () => { rankState.trayCollapsed = !rankState.trayCollapsed; drawRank(); });
 
     const submit = document.getElementById('submit-btn');
     if (submit) submit.addEventListener('click', async () => {
@@ -454,12 +692,13 @@
   }
 
   function attachChip(chip) {
-    chip.addEventListener('click', () => {
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (chip.dataset.justDragged) { delete chip.dataset.justDragged; return; }
       rankState.sel = rankState.sel === chip.dataset.item ? null : chip.dataset.item;
       drawRank();
       const p = document.getElementById('placer');
-      if (p) p.scrollIntoView({ block: 'nearest' });
+      if (p) p.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
     });
 
     chip.addEventListener('pointerdown', (e) => {
@@ -477,14 +716,15 @@
           }
           started = true;
           ghost = chip.cloneNode(true);
-          ghost.classList.add('chip-ghost');
+          ghost.classList.add('itile-ghost');
+          ghost.classList.remove('selected');
           document.body.appendChild(ghost);
           chip.classList.add('dragging');
         }
         ghost.style.left = ev.clientX + 'px';
         ghost.style.top = ev.clientY + 'px';
         const under = document.elementFromPoint(ev.clientX, ev.clientY);
-        const target = under && under.closest('.tier-items');
+        const target = under && under.closest('[data-zone]');
         if (lastTarget && lastTarget !== target) lastTarget.classList.remove('drop-target');
         if (target) target.classList.add('drop-target');
         lastTarget = target;
@@ -494,7 +734,7 @@
       const onUp = (ev) => {
         if (started) {
           const under = document.elementFromPoint(ev.clientX, ev.clientY);
-          const zone = under && under.closest('.tier-items');
+          const zone = under && under.closest('[data-zone]');
           if (zone) {
             if (zone.dataset.tier) rankState.placements[id] = parseInt(zone.dataset.tier, 10);
             else if (zone.dataset.tray) delete rankState.placements[id];
@@ -543,9 +783,9 @@
     rankState.saveTimer = setTimeout(async () => {
       try {
         await saveRanking(false);
-        rankState.saveNote = 'Saved ✓';
-        const note = document.querySelector('main .text-\\[13px\\] .font-semibold');
-        if (note) note.textContent = 'Saved ✓';
+        rankState.saveNote = '· Saved ✓';
+        const note = document.getElementById('save-note');
+        if (note) note.textContent = '· Saved ✓';
       } catch (err) {
         toast('Autosave failed: ' + err.message);
       }
@@ -580,6 +820,8 @@
 
   // ---------- Results / reveal / peek ----------
 
+  const resultsUi = { view: 'crowd' };
+
   async function renderResults(id, scrollToComments) {
     loading('…');
     const [data, agg] = await Promise.all([
@@ -591,116 +833,163 @@
     const labels = t.tier_labels;
     const byId = {};
     for (const it of data.items) byId[it.id] = it;
+    await Promise.race([prewarm(data.items, t.category, 42), new Promise((r) => setTimeout(r, 800))]);
 
     // Submitted-ness and having an alignment score are separate states now:
     // leave-one-out scoring returns nothing until someone ELSE has ranked, so a
     // first ranker is submitted-but-unscored (issue #14).
     const mineSubmitted = data.my.status === 'submitted';
     const stats = mineSubmitted && agg.my ? agg.my.stats : null;
+    const myP = agg.my && agg.my.placements ? agg.my.placements : null;
+    if (!myP && resultsUi.view !== 'crowd') resultsUi.view = 'crowd';
+    const verdictWord = data.daily && data.daily.is_final ? 'final verdict' : 'live verdict';
 
     let revealHtml = '';
     if (stats) {
       const hot = stats.hottest;
       const hotItem = hot && byId[hot.item_id];
-      revealHtml = `
-        <div class="card p-4 text-center mb-2">
-          <div class="font-display font-black text-4xl">${stats.alignment}% aligned</div>
-          <div class="text-[13px] mt-1" style="color:var(--ink-soft)">with ${stats.others_n} other ranker${stats.others_n === 1 ? '' : 's'} · ${stats.compared} item${stats.compared === 1 ? '' : 's'} compared</div>
-          <div class="text-[12.5px] mt-1 font-bold">${breakdownLine(stats)}</div>
+      const hotCard = hotItem && hot.distance > 0 ? `<div class="hot mt-5">
+          <span class="tile" style="background:${I.tintFor(hotItem.id)}">${illoHtml(hotItem, 62, t.category)}</span>
+          <span class="flex-1 min-w-0">
+            <span class="kicker text-[14px] block">Your hottest take</span>
+            <span class="cond text-[18px] block truncate">${esc(hotItem.name)}</span>
+            <span class="flex gap-1.5 mt-1 items-center text-[13px]">You ${tierLetterChip(labels, hot.mine)} <span style="color:var(--ink-soft)">·</span> Crowd ${tierLetterChip(labels, hot.community)}</span>
+          </span>
+          <span class="rbadge">TOP ${hot.percentile}% CONTRARIAN!</span>
+        </div>` : hotItem ? `<div class="hot mt-5">
+          <span class="tile" style="background:${I.tintFor(hotItem.id)}">${illoHtml(hotItem, 62, t.category)}</span>
+          <span class="flex-1 min-w-0 text-[14px]">
+            <span class="kicker text-[14px] block">Most divided</span>
+            <span class="cond text-[18px] block truncate">${esc(hotItem.name)}</span>
+            You say ${tierLetterChip(labels, hot.mine)} and the others are split around you, so only ${Math.round(hot.credit * 100)}% of them agree.
+          </span>
+        </div>` : `<div class="hot mt-5"><span class="flex-1 text-[14px]"><span class="kicker text-[14px] block">No hot takes</span>
+          You agree with the crowd on everything. Suspicious.</span></div>`;
+      revealHtml = `<div class="text-center mt-1">
+          <div class="kicker text-[15px]">${esc(t.title)} · ${verdictWord}</div>
+          <div class="serif" style="font-size:84px;line-height:1">${stats.alignment}%</div>
+          <div class="cond text-[21px]">Aligned with the crowd</div>
+          <div class="kicker text-[14px] mt-1">vs ${stats.others_n} other ranker${stats.others_n === 1 ? '' : 's'} · ${stats.compared} item${stats.compared === 1 ? '' : 's'} compared</div>
         </div>
-        ${hotItem && hot.distance > 0 ? `<div class="card p-3 mb-2 text-sm">
-          <b>Your hottest take</b> — ${esc(hotItem.name)} in ${tierLetterChip(labels, hot.mine)} (the others: ${tierLetterChip(labels, hot.community)}) · top ${hot.percentile}% contrarian
-        </div>` : hotItem ? `<div class="card p-3 mb-2 text-sm">
-          <b>Most divided</b> — ${esc(hotItem.name)}: you say ${tierLetterChip(labels, hot.mine)} and the others are split around you, so only ${Math.round(hot.credit * 100)}% of them agree.
-        </div>` : '<div class="card p-3 mb-2 text-sm"><b>No hot takes</b> — you agree with the crowd on everything. Suspicious. 🤨</div>'}`;
+        <div class="stats3 mt-5" aria-label="${esc(breakdownLine(stats))}">
+          <div><div class="n">${stats.exact}</div><div class="k">Exact</div></div>
+          <div><div class="n">${stats.near || 0}</div><div class="k">One tier off</div></div>
+          <div><div class="n" style="color:var(--accent)">${stats.clashes || 0}</div><div class="k">Clashes</div></div>
+        </div>
+        ${hotCard}`;
     } else if (mineSubmitted) {
-      revealHtml = `<div class="card p-4 mb-2 text-sm" style="background:var(--peek-bg);border-color:var(--card-line-hover)">
-        <div class="font-display font-black text-lg mb-1">You're the first ranker 🥇</div>
-        Your ranking is in ✓ — there's nobody to be aligned <i>with</i> yet. Your alignment % and
-        hottest take unlock as soon as someone else ranks this list.
-      </div>`;
+      revealHtml = `<div class="text-center mt-1">
+          <div class="kicker text-[15px]">${esc(t.title)} · ${verdictWord}</div>
+          <div class="serif" style="font-size:84px;line-height:1">—</div>
+        </div>
+        <div class="card p-4 mt-3 text-[14px]" style="background:var(--peek-bg)">
+          <div class="serif text-[21px] mb-1">You're the first ranker</div>
+          Your ranking is in, but there's nobody to be aligned <i>with</i> yet. Your alignment % and
+          hottest take unlock as soon as someone else ranks this list.
+        </div>`;
     } else {
-      revealHtml = `<div class="card p-3 mb-2 text-sm" style="background:var(--peek-bg);border-color:var(--card-line-hover)">
-        <b>You're peeking.</b> The community grid is below — your own reveal (alignment %, hottest take) unlocks when you rank.
-        <button data-nav="/t/${id}" class="btn-primary mt-2">Rank it yourself</button>
-      </div>`;
+      revealHtml = `<div class="text-center mt-1"><div class="kicker text-[15px]">${esc(t.title)} · ${verdictWord}</div>
+          <h1 class="cond text-[26px] leading-tight">${esc(t.title)}</h1></div>
+        <div class="card p-4 mt-3 flex items-center gap-3 text-[14px]" style="background:var(--peek-bg)">
+          <span class="flex-1"><b>You're peeking.</b> The crowd's grid is below. Your own verdict (alignment %, hottest take) unlocks when you rank.</span>
+          <button data-nav="/t/${id}" class="circle md" style="font-size:14px">Rank it yourself</button>
+        </div>`;
     }
 
     const contested = agg.most_contested && byId[agg.most_contested];
-    const contestedHtml = contested ? `<div class="card p-3 mb-2 text-sm">
-      <b>Most contested</b> — ${esc(contested.name)} (spread across ${agg.items[agg.most_contested].dist.filter((c) => c > 0).length} tiers)
-    </div>` : '';
+    const contestedHtml = contested ? `<button data-dist="${contested.id}" class="act-line un-pressable mt-2">
+      Most contested: <span class="dim">${esc(contested.name)}, spread across ${agg.items[agg.most_contested].dist.filter((c) => c > 0).length} tiers</span></button>` : '';
 
-    const gridRows = labels.map((label, i) => {
-      const tier = i + 1;
-      const inTier = data.items
-        .filter((it) => agg.items[it.id] && agg.items[it.id].median === tier)
-        .sort((a, b) => agg.items[b.id].placed - agg.items[a.id].placed);
-      return `<div class="tier-row mb-1.5">
-        <div class="tier-label" style="background:${tierColor(i)}">${esc(label)}</div>
-        <div class="tier-items" style="cursor:default">${inTier.map((it) => `
-          <button class="chip" data-dist="${it.id}" style="touch-action:auto">${it.emoji ? esc(it.emoji) + ' ' : ''}${esc(it.name)}
-            ${agg.most_contested === it.id ? '<span class="badge" style="background:var(--tint-danger-bg);color:var(--tint-danger-fg)">🔥</span>' : ''}
-            ${it.is_new ? '<span class="badge" style="background:var(--tint-accent-bg);color:var(--tint-accent-fg)">NEW</span>' : ''}
-            ${agg.comment_counts[it.id] ? `<span class="badge" style="background:var(--tint-neutral-bg);color:var(--tint-neutral-fg)">💬${agg.comment_counts[it.id]}</span>` : ''}
-          </button>`).join('')}</div>
-      </div>`;
-    }).join('');
+    const itemBtn = (it, extra) => `<button class="fig gitem" data-dist="${it.id}" aria-label="${esc(it.name)}: show the vote spread">
+        ${figInner(it, 42, extra || '')}
+        ${agg.most_contested === it.id ? '<span class="flag" style="background:var(--tint-danger-bg);color:var(--tint-danger-fg)">split</span>'
+          : it.is_new ? '<span class="flag" style="background:var(--ink);color:var(--paper)">NEW</span>'
+          : agg.comment_counts[it.id] ? `<span class="flag" style="background:var(--tint-neutral-bg);color:var(--tint-neutral-fg)" aria-label="${agg.comment_counts[it.id]} comments">${agg.comment_counts[it.id]} ¶</span>` : ''}
+      </button>`;
+
+    const median = (it) => agg.items[it.id] ? agg.items[it.id].median : null;
+    function gridHtml(view) {
+      const differs = (it) => myP && myP[it.id] != null && median(it) != null && myP[it.id] !== median(it);
+      if (view === 'diff' && !data.items.some(differs)) {
+        return '<div class="act-line dim kicker">You and the crowd agree on everything you placed.</div>';
+      }
+      return labels.map((label, i) => {
+        const tier = i + 1;
+        let list;
+        if (view === 'mine') list = data.items.filter((it) => myP && myP[it.id] === tier);
+        else if (view === 'diff') list = data.items.filter((it) => median(it) === tier && differs(it));
+        else list = data.items.filter((it) => median(it) === tier).sort((a, b) => agg.items[b.id].placed - agg.items[a.id].placed);
+        return `<div class="tier-row mb-2">
+          <div class="tblock ${String(label).length > 2 ? 'small' : ''}" style="background:${tierColor(i)}">${esc(label)}</div>
+          <div class="tier-items ${list.length ? '' : 'empty'}">${list.map((it) => itemBtn(it, view === 'diff' ? ` · you ${esc(labels[myP[it.id] - 1] || '')}` : '')).join('')
+            || '<span class="kicker text-[13px]" style="color:var(--ink-faint)">—</span>'}</div>
+        </div>`;
+      }).join('');
+    }
 
     const noData = data.items.filter((it) => !agg.items[it.id] || agg.items[it.id].median == null);
-    const noDataHtml = noData.length ? `<div class="text-[12.5px] mt-2" style="color:var(--ink-soft)">
+    const noDataHtml = noData.length ? `<div class="kicker text-[13px] mt-2">
       Not enough data yet: ${noData.map((it) => esc(it.name)).join(' · ')}</div>` : '';
 
     const groupBtns = (await getHome()).groups.map((g) =>
-      `<button data-groupcmp="${g.id}" class="card px-3 py-2 text-[12.5px] font-bold un-pressable">${esc(g.name)} vs the world</button>`).join('');
+      `<button data-groupcmp="${g.id}" class="pill" style="background:var(--card);color:var(--ink)">${esc(g.name)} vs the world</button>`).join('');
 
     const hasHotTake = !!(stats && stats.hottest && stats.hottest.distance > 0);
+    const views = [['crowd', `Crowd<sup class="cnt">(${agg.n})</sup>`], ...(myP ? [['mine', 'Mine'], ['diff', 'Difference']] : [])];
 
-    screen(`${header(esc(t.title), { back: '/' })}
-    <main class="max-w-xl mx-auto p-4 pb-10 un-safe-bottom">
-      ${data.daily ? `<div class="text-[11px] font-bold uppercase tracking-widest mb-2" style="color:var(--accent)">Today's List · No. ${data.daily.edition_no}${data.daily.is_final ? ' · final verdict' : ' · live'}</div>` : ''}
+    screen(`<main class="max-w-xl mx-auto px-4 pb-10 un-safe-top un-safe-bottom">
+      ${topbar('<button data-nav="/">Close</button>', mineSubmitted ? '<button id="share-open">Share</button>' : '')}
       ${revealHtml}
       ${contestedHtml}
-      <div class="flex items-baseline gap-2 mt-4 mb-2">
-        <div class="text-[11px] font-bold uppercase tracking-widest" style="color:var(--ink-soft)">Community grid</div>
-        <div class="text-[12px]" style="color:var(--ink-soft)">median tier per item · ${agg.n} rankings · tap an item for its distribution</div>
-      </div>
-      ${gridRows}
+      <div class="tabs mt-6" role="tablist" aria-label="Grid">${views.map(([k, l]) =>
+        `<button role="tab" data-view="${k}" aria-selected="${resultsUi.view === k}">${l}</button>`).join('')}</div>
+      <div class="kicker text-[13px]">median tier per item · ${agg.n} rankings · tap an item for its spread</div>
+      <div id="grid" class="mt-3">${gridHtml(resultsUi.view)}</div>
       ${noDataHtml}
-      ${mineSubmitted ? `<div class="grid grid-cols-2 gap-2 mt-4">
-        <button id="share-grid" class="btn-primary" style="width:auto">SHARE MY GRID<span class="block text-[10px] font-semibold opacity-75">your full grid</span></button>
-        <button id="share-take" class="btn-primary" style="width:auto" ${hasHotTake ? '' : 'disabled'}>SHARE MY TAKE<span class="block text-[10px] font-semibold opacity-75">your hottest take</span></button>
+      ${mineSubmitted ? `<div class="flex gap-2 mt-6">
+        <button id="share-grid" class="pill flex-1">Share my grid</button>
+        <button id="share-take" class="pill accent flex-1" ${hasHotTake ? '' : 'disabled'}>Share my take</button>
       </div>
-      ${hasHotTake ? '' : `<div class="text-[12px] mt-1 text-center" style="color:var(--ink-soft)">${stats ? 'No hot takes to share — you agree with the crowd.' : 'Nobody else has ranked this yet — no take to compare.'}</div>`}` : ''}
-      <button data-nav="/t/${id}" class="card w-full px-3 py-3 mt-2 text-[13px] font-bold un-pressable">✏️ ${mineSubmitted ? 'Edit my ranking' : 'Rank this list'}</button>
+      ${hasHotTake ? '' : `<div class="kicker text-[13px] mt-1 text-center">${stats ? 'No hot takes to share. You agree with the crowd.' : 'Nobody else has ranked this yet, so there is no take to compare.'}</div>`}` : ''}
+      <div class="text-center mt-1"><button data-nav="/t/${id}" class="linkish text-[16px]">${mineSubmitted ? 'Edit my ranking' : 'Rank this list'}</button></div>
       <section id="comments-section" class="mt-4">
-        <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Comments (<span id="c-count">${agg.total_comments}</span>)</div>
+        <h2 class="sec-h">Comments<sup class="cnt">(<span id="c-count">${agg.total_comments}</span>)</sup></h2>
         <div class="card p-3 mb-2">
-          <div class="text-[12px] font-bold mb-1" style="color:var(--ink-soft)">ADD A COMMENT</div>
+          <label for="c-anchor" class="kicker text-[13px] block mb-1">About</label>
           <select id="c-anchor" class="mb-2">
             <option value="">Whole list</option>
             ${data.items.map((it) => `<option value="${it.id}">re: ${esc(it.name)}</option>`).join('')}
           </select>
-          <textarea id="c-body" rows="2" placeholder="Say it. Politely-ish."></textarea>
-          <button id="c-post" class="btn-primary mt-2" style="width:auto;padding:9px 16px">Post</button>
+          <textarea id="c-body" rows="2" placeholder="Say it. Politely-ish." aria-label="Comment"></textarea>
+          <button id="c-post" class="pill mt-2">Post</button>
         </div>
         <div class="card px-3 py-1">
           <div id="c-list" class="text-sm py-2" style="color:var(--ink-soft)">Loading…</div>
         </div>
       </section>
-      ${agg.rankers.length && data.my.status === 'submitted' ? `<div class="mt-4">
-        <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Head-to-head</div>
+      ${agg.rankers.length && mineSubmitted ? `<div class="mt-2">
+        <h2 class="sec-h">Head-to-head</h2>
         <div class="flex flex-wrap gap-2">${agg.rankers.slice(0, 10).map((u) =>
-          `<button data-nav="/t/${id}/compare/${encodeURIComponent(u)}" class="card px-3 py-2 text-[12.5px] font-bold un-pressable">vs ${esc(u)}</button>`).join('')}</div>
+          `<button data-nav="/t/${id}/compare/${encodeURIComponent(u)}" class="pill" style="background:var(--card);color:var(--ink)">vs ${esc(u)}</button>`).join('')}</div>
       </div>` : ''}
-      ${t.visibility === 'public' && groupBtns ? `<div class="mt-4">
-        <div class="text-[11px] font-bold uppercase tracking-widest mb-1" style="color:var(--ink-soft)">Group vs global</div>
+      ${t.visibility === 'public' && groupBtns ? `<div class="mt-2">
+        <h2 class="sec-h">Group vs global</h2>
         <div class="flex flex-wrap gap-2">${groupBtns}</div>
       </div>` : ''}
     </main>`);
 
-    document.querySelectorAll('[data-dist]').forEach((chip) => chip.addEventListener('click', () => {
-      showDistribution(byId[chip.getAttribute('data-dist')], agg, labels);
+    const bindDist = () => document.querySelectorAll('[data-dist]').forEach((chip) => chip.addEventListener('click', () => {
+      showDistribution(byId[chip.getAttribute('data-dist')], agg, labels, t.category);
+    }));
+    bindDist();
+    document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
+      resultsUi.view = b.dataset.view;
+      document.querySelectorAll('[data-view]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+      const grid = document.getElementById('grid');
+      grid.innerHTML = gridHtml(resultsUi.view);
+      hydrateIllos(grid);
+      grid.querySelectorAll('[data-dist]').forEach((chip) => chip.addEventListener('click', () =>
+        showDistribution(byId[chip.getAttribute('data-dist')], agg, labels, t.category)));
     }));
     setupComments(t, agg.total_comments);
     if (scrollToComments) {
@@ -708,19 +997,32 @@
       // comments scroll behind it.
       setTimeout(() => {
         const sec = document.getElementById('comments-section');
-        if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+        if (sec) sec.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth' });
       }, 0);
     }
 
+    const doGrid = () => shareGridCard(t, data, agg, stats);
+    const doTake = () => shareTakeCard(t, byId, stats);
     const sg = document.getElementById('share-grid');
-    if (sg) sg.addEventListener('click', () => shareGridCard(t, data, agg, stats));
+    if (sg) sg.addEventListener('click', doGrid);
     const st = document.getElementById('share-take');
-    if (st) st.addEventListener('click', () => shareTakeCard(t, byId, stats));
+    if (st) st.addEventListener('click', doTake);
+    const so = document.getElementById('share-open');
+    if (so) so.addEventListener('click', () => {
+      const { panel, close } = showSheet(`
+        <div class="serif text-[22px] mb-3">Share</div>
+        <div class="flex flex-col gap-2">
+          <button id="sh-grid" class="pill">Share my grid</button>
+          <button id="sh-take" class="pill accent" ${hasHotTake ? '' : 'disabled'}>Share my take</button>
+        </div>`);
+      panel.querySelector('#sh-grid').addEventListener('click', () => { close(); doGrid(); });
+      panel.querySelector('#sh-take').addEventListener('click', () => { close(); doTake(); });
+    });
     document.querySelectorAll('[data-groupcmp]').forEach((b) => b.addEventListener('click', () =>
       showGroupCompare(t, data.items, agg, b.getAttribute('data-groupcmp'), b.textContent)));
   }
 
-  function showDistribution(item, agg, labels) {
+  function showDistribution(item, agg, labels, category) {
     if (!item) return;
     const a = agg.items[item.id];
     const total = a ? a.placed : 0;
@@ -728,28 +1030,34 @@
     const bars = labels.map((l, i) => {
       const c = a ? a.dist[i] : 0;
       return `<div class="flex items-center gap-2 mb-1.5">
-        <span class="badge" style="background:${tierColor(i)};color:#fff;width:30px;text-align:center">${esc(l)}</span>
+        <span class="tchip" style="background:${tierColor(i)};min-width:34px;text-align:center">${esc(l)}</span>
         <div class="dist-bar" style="background:${tierColor(i)};width:${Math.round((c / max) * 70)}%"></div>
-        <span class="text-[12px] font-bold">${c}</span>
+        <span class="text-[13px] font-semibold">${c}</span>
       </div>`;
     }).join('');
-    const { close } = showSheet(`
-      <div class="font-display font-black text-lg mb-1">${item.emoji ? esc(item.emoji) + ' ' : ''}${esc(item.name)}</div>
-      <div class="text-[12.5px] mb-3" style="color:var(--ink-soft)">
-        ${a && a.median ? `community tier: ${esc(labels[a.median - 1])}` : 'not enough data yet'} ·
-        ${total} placement${total === 1 ? '' : 's'} · ${a ? a.skip_pct : 0}% skipped
-        ${item.is_new ? ' · <b style="color:var(--tint-accent-fg)">NEW — low data</b>' : ''}
+    const { panel, close } = showSheet(`
+      <div class="flex items-center gap-3 mb-2">
+        ${illoHtml(item, 56, category)}
+        <div class="min-w-0">
+          <div class="cond text-[20px] leading-tight">${esc(item.name)}</div>
+          <div class="kicker text-[13px]">
+            ${a && a.median ? `crowd tier: ${esc(labels[a.median - 1])}` : 'not enough data yet'} ·
+            ${total} placement${total === 1 ? '' : 's'} · ${a ? a.skip_pct : 0}% skipped
+            ${item.is_new ? ' · new, low data' : ''}
+          </div>
+        </div>
       </div>
       ${bars}
-      <button id="dist-comment" class="mt-3 text-[13px] font-bold" style="color:var(--accent)">💬 comment on ${esc(item.name)}</button>
+      <button id="dist-comment" class="linkish text-[15px]">Comment on ${esc(item.name)}</button>
     `);
+    hydrateIllos(panel);
     const dc = document.getElementById('dist-comment');
     if (dc) dc.addEventListener('click', () => {
       close();
       const sel = document.getElementById('c-anchor');
       if (sel) sel.value = item.id;
       const sec = document.getElementById('comments-section');
-      if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+      if (sec) sec.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth' });
       const box = document.getElementById('c-body');
       if (box) box.focus({ preventScroll: true });
     });
@@ -1075,7 +1383,7 @@
     if (!el) return;
     el.innerHTML = newState.labels.map((l, i) => `
       <input data-tl="${i}" value="${esc(l)}" maxlength="12"
-        style="width:64px;text-align:center;font-weight:800;color:#fff;background:${tierColor(i)};border:none">`).join('')
+        style="width:64px;text-align:center;font-weight:700;color:${TIER_INK};background:${tierColor(i)};border:none">`).join('')
       + `<button id="tl-minus" class="un-touch-target font-black text-lg px-2" ${newState.labels.length <= 3 ? 'disabled' : ''}>−</button>
          <button id="tl-plus" class="un-touch-target font-black text-lg px-2" ${newState.labels.length >= 6 ? 'disabled' : ''}>＋</button>`;
     el.querySelectorAll('[data-tl]').forEach((inp) => inp.addEventListener('input', () => {
@@ -1161,12 +1469,17 @@
           api(`/api/templates/${tid}/aggregate?group=${d.group.id}`),
         ]);
         const labels = td.template.tier_labels;
-        const top = td.items.filter((it) => agg.items[it.id] && agg.items[it.id].median === 1).map((it) => it.name);
-        const canvas = drawCard({
+        const topItems = td.items.filter((it) => agg.items[it.id] && agg.items[it.id].median === 1);
+        const top = topItems.map((it) => it.name);
+        const canvas = await drawVerdictPoster({
+          kicker: 'our verdict',
           title: `${d.group.name}'s verdict`,
           subtitle: td.template.title,
-          lines: top.length ? [`${labels[0]}-tier: ${top.join(', ')}`] : ['No S-tier consensus yet. Keep arguing.'],
-          footer: `${agg.n} member rankings · Community Tier Lists`,
+          items: topItems,
+          category: td.template.category,
+          line: top.length ? `${labels[0]}-tier: ${top.join(', ')}` : 'No S-tier consensus yet. Keep arguing.',
+          foot: `${agg.n} member rankings`,
+          link: shareLink(tid),
         });
         await shareCanvas(canvas, `${d.group.name}'s ${labels[0]}-tier for "${td.template.title}"`, location.origin + '/t/' + tid);
       } catch (err) { toast(err.message); }
@@ -1318,20 +1631,87 @@
     });
   }
 
-  // ---------- Share cards (client-side canvas, 1200×630) ----------
+  // ---------- Share images (client-side canvas posters) ----------
   // Deliberately theme-INDEPENDENT: these are images posted outside the app,
-  // so they always render on cream paper regardless of the sender's theme.
-  // Don't "helpfully" swap these literals for theme tokens.
+  // so they always render on paper regardless of the sender's theme.
+  // Don't "helpfully" swap these literals for theme tokens. Items are drawn
+  // from the same cached illustration bitmaps the screens use.
 
-  function cardBase() {
+  const SHARE = { paper: '#F1EDE4', card: '#FAF9F6', ink: '#1E1B18', soft: '#625D55', accent: '#9C4A30', onAccent: '#FAF9F6' };
+  const F_SERIF = "'Instrument Serif', Georgia, serif";
+  const F_COND = "'Archivo Narrow', 'Arial Narrow', Georgia, sans-serif";
+  const F_SANS = 'Archivo, system-ui, sans-serif';
+
+  // Never block sharing on fonts: whatever loads in ~1.5s is used, the rest
+  // falls back to Georgia/system.
+  async function shareFonts() {
+    if (!document.fonts || !document.fonts.load) return;
+    const want = [`italic 40px ${F_SERIF}`, `40px ${F_SERIF}`, `500 40px ${F_COND}`, `600 20px ${F_SANS}`];
+    await Promise.race([Promise.all(want.map((f) => document.fonts.load(f).catch(() => null))), new Promise((r) => setTimeout(r, 1500))]);
+  }
+
+  function loadImage(src, cors) {
+    return new Promise((resolve) => {
+      if (!src) { resolve(null); return; }
+      const img = new Image();
+      if (cors) img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+  }
+
+  // Same four kinds as on screen. An image that can't load (offline, CORS)
+  // degrades to the name tile, never to a blank or a stand-in drawing.
+  async function itemImage(it, _category, size) {
+    const v = visualOf(it);
+    if (v.kind === 'photo' || v.kind === 'official') {
+      const img = await loadImage(v.url, true);
+      return img ? { kind: v.kind, img, item: it } : { kind: 'name', item: it };
+    }
+    if (v.kind === 'drawing') {
+      const img = await loadImage(await I.load(v.key, size, 'light'));
+      return img ? { kind: 'drawing', img, item: it } : { kind: 'name', item: it };
+    }
+    return { kind: 'name', item: it };
+  }
+
+  // Word-wrap `text` into at most `maxLines` lines of `maxW`, shrinking the
+  // font until it fits.
+  function wrapLines(x, text, family, px, minPx, maxW, maxLines) {
+    for (; px >= minPx; px -= 2) {
+      x.font = family.replace('{px}', px);
+      const lines = [];
+      let line = '';
+      for (const word of String(text).split(/\s+/)) {
+        const tryLine = line ? line + ' ' + word : word;
+        if (x.measureText(tryLine).width <= maxW || !line) line = tryLine;
+        else { lines.push(line); line = word; }
+      }
+      if (line) lines.push(line);
+      if (lines.length <= maxLines && lines.every((l) => x.measureText(l).width <= maxW)) return { lines, px };
+    }
+    x.font = family.replace('{px}', minPx);
+    return { lines: [ellipsize(x, String(text), maxW)], px: minPx };
+  }
+
+  function canvasBase(w, h, bg) {
     const c = document.createElement('canvas');
-    c.width = 1200; c.height = 630;
+    c.width = w; c.height = h;
     const x = c.getContext('2d');
-    x.fillStyle = '#FAF6EE';
-    x.fillRect(0, 0, 1200, 630);
-    x.fillStyle = '#1F2B47';
-    x.fillRect(0, 0, 1200, 8);
+    x.fillStyle = bg || SHARE.paper;
+    x.fillRect(0, 0, w, h);
     return { c, x };
+  }
+
+  function rrect(x, left, top, w, h, r) {
+    x.beginPath();
+    x.moveTo(left + r, top);
+    x.arcTo(left + w, top, left + w, top + h, r);
+    x.arcTo(left + w, top + h, left, top + h, r);
+    x.arcTo(left, top + h, left, top, r);
+    x.arcTo(left, top, left + w, top, r);
+    x.closePath();
   }
 
   function ellipsize(x, text, maxW) {
@@ -1340,59 +1720,263 @@
     return text + '…';
   }
 
-  function drawCard({ title, subtitle, lines, footer }) {
-    const { c, x } = cardBase();
-    x.fillStyle = '#1F2B47';
-    x.font = '900 58px Georgia, serif';
-    x.fillText(ellipsize(x, title, 1100), 50, 105);
-    if (subtitle) {
-      x.fillStyle = '#5A6378';
-      x.font = '700 34px Inter, system-ui, sans-serif';
-      x.fillText(ellipsize(x, subtitle, 1100), 50, 160);
+  // Largest condensed headline size (down to `min`) that fits, then ellipsize.
+  function fitText(x, text, weightFamily, maxPx, minPx, maxW) {
+    let px = maxPx;
+    x.font = `${weightFamily.replace('{px}', px)}`;
+    while (px > minPx && x.measureText(text).width > maxW) { px -= 4; x.font = weightFamily.replace('{px}', px); }
+    return ellipsize(x, text, maxW);
+  }
+
+  function drawItem(x, entry, cx, top, size, rot, caption, capPx) {
+    const kind = entry ? entry.kind : 'name';
+    if (kind === 'name') {
+      // the tile carries the name, so it takes the caption's space too
+      const it = (entry && entry.item) || { name: caption || '' };
+      const h = size + (caption ? capPx * 1.2 : 0);
+      x.fillStyle = I.tintFor(it.id || it.name);
+      rrect(x, cx - size / 2 - 8, top, size + 16, h, Math.max(12, size * 0.14)); x.fill();
+      x.fillStyle = SHARE.ink;
+      x.textAlign = 'center';
+      const fit = wrapLines(x, it.name.toUpperCase(), `600 {px}px ${F_COND}`, Math.round(size * 0.26), 14, size - 4, 4);
+      const lh = fit.px * 1.08;
+      const y0 = top + h / 2 - (fit.lines.length * lh) / 2 + fit.px * 0.82;
+      fit.lines.forEach((l, i) => x.fillText(l, cx, y0 + i * lh));
+      x.textAlign = 'left';
+      return;
     }
-    x.fillStyle = '#1F2B47';
-    x.font = '600 40px Inter, system-ui, sans-serif';
-    let y = subtitle ? 250 : 210;
-    for (const line of lines) {
-      x.fillText(ellipsize(x, line, 1100), 50, y);
-      y += 62;
+    x.save();
+    x.translate(cx, top + size / 2);
+    if (kind === 'drawing') x.rotate(rot * Math.PI / 180);
+    if (kind === 'photo') {
+      rrect(x, -size / 2, -size / 2, size, size, size * 0.12);
+      x.clip();
+      // cover-fit
+      const s = Math.max(size / entry.img.width, size / entry.img.height);
+      x.drawImage(entry.img, -entry.img.width * s / 2, -entry.img.height * s / 2, entry.img.width * s, entry.img.height * s);
+    } else if (kind === 'official') {
+      // the official logo / poster, untouched, contain-fit on a white tile
+      x.fillStyle = '#FFFFFF';
+      rrect(x, -size / 2, -size / 2, size, size, size * 0.12); x.fill();
+      const pad = size * 0.07, box = size - pad * 2;
+      const s = Math.min(box / entry.img.width, box / entry.img.height);
+      x.drawImage(entry.img, -entry.img.width * s / 2, -entry.img.height * s / 2, entry.img.width * s, entry.img.height * s);
+    } else {
+      x.drawImage(entry.img, -size / 2, -size / 2, size, size);
     }
-    x.fillStyle = '#A88317';
-    x.font = '700 26px Inter, system-ui, sans-serif';
-    x.fillText(footer, 50, 590);
+    x.restore();
+    if (caption) {
+      x.fillStyle = SHARE.soft;
+      x.font = `italic ${capPx}px ${F_SERIF}`;
+      x.textAlign = 'center';
+      x.fillText(ellipsize(x, caption, size + 26), cx, top + size + capPx * 0.95);
+      x.textAlign = 'left';
+    }
+  }
+
+  function footer(x, w, h, link) {
+    x.fillStyle = SHARE.ink;
+    x.font = `46px ${F_SERIF}`;
+    x.fillText('Tier Lists', 60, h - 52);
+    x.fillStyle = SHARE.soft;
+    x.font = `italic 28px ${F_SERIF}`;
+    x.textAlign = 'right';
+    x.fillText(ellipsize(x, link, w / 2), w - 60, h - 54);
+    x.textAlign = 'left';
+  }
+
+  function circleBadge(x, cx, cy, r, text, sub) {
+    x.fillStyle = SHARE.accent;
+    x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
+    x.fillStyle = SHARE.onAccent;
+    x.textAlign = 'center';
+    x.font = `${sub ? 54 : 60}px ${F_SERIF}`;
+    x.fillText(text, cx, cy + (sub ? 8 : 20));
+    if (sub) { x.font = `italic 24px ${F_SERIF}`; x.fillText(sub, cx, cy + 40); }
+    x.textAlign = 'left';
+  }
+
+  // 1080×1350 poster of a full grid.
+  async function drawGridPoster({ kicker, title, labels, items, placementOf, category, badge, badgeSub, link }) {
+    await shareFonts();
+    const W = 1080, H = 1350;
+    const { c, x } = canvasBase(W, H);
+    x.fillStyle = SHARE.soft;
+    x.textAlign = 'center';
+    x.font = `italic 46px ${F_SERIF}`;
+    x.fillText(kicker, W / 2, 98);
+    x.fillStyle = SHARE.ink;
+    const t = fitText(x, title.toUpperCase(), `500 {px}px ${F_COND}`, 92, 56, 640);
+    x.fillText(t, W / 2, 196);
+    x.textAlign = 'left';
+    if (badge) circleBadge(x, W - 132, 150, 82, badge, badgeSub);
+
+    const k = labels.length;
+    const top = 268, bottom = 1208, gap = 16;
+    const rowH = (bottom - top - gap * (k - 1)) / k;
+    const rows = labels.map((_, i) => items.filter((it) => placementOf(it) === i + 1));
+    const imgs = new Map();
+    await Promise.all(rows.flat().map(async (it) => imgs.set(it.id, await itemImage(it, category, 240))));
+    const left = 60, blockW = 128, rowL = left + blockW + 16, rowR = W - 60;
+    rows.forEach((list, i) => {
+      const y = top + i * (rowH + gap);
+      x.fillStyle = tierColor(i);
+      rrect(x, left, y, blockW, rowH, 26); x.fill();
+      x.fillStyle = TIER_INK;
+      x.textAlign = 'center';
+      const lab = String(labels[i]);
+      x.font = `${lab.length > 2 ? 40 : Math.min(84, rowH * 0.55)}px ${F_SERIF}`;
+      x.fillText(ellipsize(x, lab, blockW - 16), left + blockW / 2, y + rowH / 2 + (lab.length > 2 ? 14 : Math.min(84, rowH * 0.55) * 0.34));
+      x.textAlign = 'left';
+      x.fillStyle = SHARE.card;
+      rrect(x, rowL, y, rowR - rowL, rowH, 26); x.fill();
+      if (!list.length) {
+        x.fillStyle = '#B9B4AC';
+        x.font = `italic 30px ${F_SERIF}`;
+        x.fillText('—', rowL + 30, y + rowH / 2 + 10);
+        return;
+      }
+      const capPx = rowH > 150 ? 24 : 20;
+      const avail = rowR - rowL - 32;
+      let size = Math.min(rowH - capPx - 34, 132);
+      let slot = size + 26;
+      let shown = list;
+      if (list.length * slot > avail) {
+        size = Math.max(56, Math.floor(avail / list.length) - 26);
+        slot = size + 26;
+        const fit = Math.floor(avail / slot);
+        if (fit < list.length) shown = list.slice(0, fit - 1);
+      }
+      const blockH = size + capPx + 6;
+      const y0 = y + (rowH - blockH) / 2;
+      shown.forEach((it, j) => drawItem(x, imgs.get(it.id), rowL + 16 + slot * j + slot / 2, y0, size, I.rotFor(it.id), it.name, capPx));
+      if (shown.length < list.length) {
+        x.fillStyle = SHARE.soft;
+        x.font = `italic 34px ${F_SERIF}`;
+        x.fillText(`+${list.length - shown.length}`, rowL + 16 + slot * shown.length + 10, y + rowH / 2 + 12);
+      }
+    });
+    footer(x, W, H, link);
     return c;
   }
 
-  function drawGridCanvas(t, items, placementOf, statLine, editionTag) {
-    const { c, x } = cardBase();
-    const labels = t.tier_labels;
-    x.fillStyle = '#1F2B47';
-    x.font = '900 46px Georgia, serif';
-    x.fillText(ellipsize(x, (editionTag ? editionTag + ' · ' : '') + t.title, 1100), 50, 90);
-    const top = 120, bottom = 545;
-    const rowH = (bottom - top) / labels.length;
-    labels.forEach((label, i) => {
-      const y = top + i * rowH;
-      x.fillStyle = tierColor(i);
-      x.fillRect(50, y + 6, 86, rowH - 12);
-      x.fillStyle = '#fff';
-      x.font = '900 40px Georgia, serif';
+  const article = (label) => {
+    const l = String(label).trim();
+    if (/^[AEFHILMNORSX]$/i.test(l)) return 'AN';
+    return /^[aeiou]/i.test(l) ? 'AN' : 'A';
+  };
+
+  // 1080×1080 hot-take poster.
+  async function drawTakePoster({ item, category, title, mine, crowd, mineIdx, crowdIdx, percentile, link }) {
+    await shareFonts();
+    const W = 1080, H = 1080;
+    const { c, x } = canvasBase(W, H, I.tintFor(item.id));
+    x.fillStyle = SHARE.soft;
+    x.textAlign = 'center';
+    x.font = `italic 50px ${F_SERIF}`;
+    x.fillText('my hottest take', W / 2, 104);
+    x.textAlign = 'left';
+
+    // paper tile with the item drawn large
+    const entry = await itemImage(item, category, 360);
+    x.save();
+    x.translate(370, 455);
+    x.rotate(-3 * Math.PI / 180);
+    x.fillStyle = '#FAF6EE';
+    x.shadowColor = 'rgba(30,27,24,.12)'; x.shadowBlur = 30; x.shadowOffsetY = 10;
+    rrect(x, -270, -270, 540, 540, 40); x.fill();
+    x.restore();
+    drawItem(x, entry, 370, 455 - 225, 450, -3, null, 0);
+
+    // me / everyone else tier tiles
+    const tile = (label, idx, who, y) => {
+      x.fillStyle = SHARE.soft;
+      x.font = `italic 34px ${F_SERIF}`;
+      x.textAlign = 'right';
+      x.fillText(who, 820, y + 104);
       x.textAlign = 'center';
-      x.fillText(String(label).slice(0, 3), 93, y + rowH / 2 + 14);
+      x.fillStyle = tierColor(idx);
+      rrect(x, 850, y, 170, 170, 34); x.fill();
+      x.fillStyle = TIER_INK;
+      const l = String(label);
+      x.font = `${l.length > 2 ? 52 : 124}px ${F_SERIF}`;
+      x.fillText(ellipsize(x, l, 150), 935, y + (l.length > 2 ? 104 : 128));
       x.textAlign = 'left';
-      const names = items.filter((it) => placementOf(it) === i + 1).map((it) => it.name);
-      x.fillStyle = '#1F2B47';
-      x.font = '600 27px Inter, system-ui, sans-serif';
-      x.fillText(ellipsize(x, names.join(' · ') || '—', 990), 156, y + rowH / 2 + 10);
-    });
-    x.fillStyle = '#A88317';
-    x.font = '700 26px Inter, system-ui, sans-serif';
-    x.fillText(statLine, 50, 600);
+    };
+    tile(mine, mineIdx, 'me', 200);
+    tile(crowd, crowdIdx, 'everyone else', 420);
+
+    // black rotated badge
+    if (percentile != null) {
+      const txt = `TOP ${percentile}% CONTRARIAN!`;
+      x.save();
+      x.translate(860, 680);
+      x.rotate(6 * Math.PI / 180);
+      x.font = `600 30px ${F_SANS}`;
+      const bw = x.measureText(txt).width + 48;
+      x.fillStyle = '#1E1B18';
+      rrect(x, -bw / 2, -34, bw, 68, 22); x.fill();
+      x.fillStyle = '#FAF9F6';
+      x.textAlign = 'center';
+      x.fillText(txt, 0, 11);
+      x.restore();
+    }
+
+    x.fillStyle = SHARE.ink;
+    x.textAlign = 'center';
+    const head = `${item.name.toUpperCase()} IS ${article(mine)} ${String(mine).toUpperCase()}.`;
+    x.fillText(fitText(x, head, `500 {px}px ${F_COND}`, 100, 56, W - 120), W / 2, 845);
+    x.fillStyle = SHARE.soft;
+    x.font = `italic 36px ${F_SERIF}`;
+    x.fillText(ellipsize(x, `on “${title}”`, W - 160), W / 2, 905);
+    x.textAlign = 'left';
+    footer(x, W, H, link);
+    return c;
+  }
+
+  // Group space "share our verdict": same paper poster, S-tier items drawn.
+  async function drawVerdictPoster({ kicker, title, subtitle, items, category, line, foot, link }) {
+    await shareFonts();
+    const W = 1080, H = 1350;
+    const { c, x } = canvasBase(W, H);
+    x.textAlign = 'center';
+    x.fillStyle = SHARE.soft;
+    x.font = `italic 46px ${F_SERIF}`;
+    x.fillText(kicker, W / 2, 110);
+    x.fillStyle = SHARE.ink;
+    x.fillText(fitText(x, title.toUpperCase(), `500 {px}px ${F_COND}`, 92, 56, W - 140), W / 2, 214);
+    x.fillStyle = SHARE.soft;
+    x.font = `40px ${F_SERIF}`;
+    x.fillText(ellipsize(x, subtitle, W - 160), W / 2, 280);
+    x.textAlign = 'left';
+    x.fillStyle = SHARE.card;
+    rrect(x, 60, 340, W - 120, 700, 40); x.fill();
+    const shown = items.slice(0, 6);
+    const imgs = await Promise.all(shown.map((it) => itemImage(it, category, 240)));
+    if (shown.length) {
+      const cols = Math.min(3, shown.length), rowsN = Math.ceil(shown.length / cols);
+      const size = rowsN > 1 ? 210 : 260;
+      shown.forEach((it, i) => {
+        const col = i % cols, row = Math.floor(i / cols);
+        const cx = 60 + (W - 120) * (col + 0.5) / cols;
+        const top = 340 + (700 - rowsN * (size + 50)) / 2 + row * (size + 50);
+        drawItem(x, imgs[i], cx, top, size, I.rotFor(it.id), it.name, 28);
+      });
+    }
+    x.fillStyle = SHARE.ink;
+    x.textAlign = 'center';
+    x.font = `44px ${F_SERIF}`;
+    x.fillText(ellipsize(x, line, W - 140), W / 2, 1120);
+    x.fillStyle = SHARE.soft;
+    x.font = `italic 32px ${F_SERIF}`;
+    x.fillText(foot, W / 2, 1172);
+    x.textAlign = 'left';
+    footer(x, W, H, link);
     return c;
   }
 
   async function shareCanvas(canvas, text, url) {
-    const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+    const blob = await new Promise((r) => { try { canvas.toBlob(r, 'image/png'); } catch { r(null); } });
     if (!blob) { toast('Could not render the card'); return; }
     const file = new File([blob], 'tier-list.png', { type: 'image/png' });
     const shareText = text + (url ? ' — ' + url : '');
@@ -1407,33 +1991,62 @@
     catch { toast('Card downloaded'); }
   }
 
-  function shareGridCard(t, data, agg, stats) {
-    const byId = {};
-    for (const it of data.items) byId[it.id] = it;
-    const hot = stats && stats.hottest && byId[stats.hottest.item_id];
-    const statLine = stats
-      ? `${stats.alignment}% aligned with ${stats.others_n} other ranker${stats.others_n === 1 ? '' : 's'}${hot && stats.hottest.distance > 0 ? ` · hottest take: ${hot.name} in ${t.tier_labels[stats.hottest.mine - 1]}` : ''}`
-      : `${agg.n} ranking${agg.n === 1 ? '' : 's'} · Community Tier Lists`;
-    const canvas = drawGridCanvas(
-      t, data.items,
-      (it) => agg.my && agg.my.placements ? agg.my.placements[it.id] : null,
-      statLine,
-      data.daily ? `No. ${data.daily.edition_no}` : '');
-    shareCanvas(canvas, `My tier list for "${t.title}"`, location.origin + '/t/' + t.id);
+  const shareLink = (id) => location.host + '/t/' + id;
+
+  async function shareGridCard(t, data, agg, stats) {
+    toast('Drawing your grid…');
+    try {
+      const canvas = await drawGridPoster({
+        kicker: data.daily ? `my tier list · No. ${data.daily.edition_no}` : 'my tier list',
+        title: t.title,
+        labels: t.tier_labels,
+        items: data.items,
+        placementOf: (it) => agg.my && agg.my.placements ? agg.my.placements[it.id] : null,
+        category: t.category,
+        badge: stats ? `${stats.alignment}%` : String(agg.n),
+        badgeSub: stats ? null : 'ranked',
+        link: 'rank yours → ' + shareLink(t.id),
+      });
+      await shareCanvas(canvas, `My tier list for "${t.title}"`, location.origin + '/t/' + t.id);
+    } catch (err) { toast('Could not render the card'); console.warn(err); }
   }
 
-  function shareTakeCard(t, byId, stats) {
+  async function shareTakeCard(t, byId, stats) {
     if (!stats || !stats.hottest) return;
     const item = byId[stats.hottest.item_id];
     if (!item) return;
-    const tier = t.tier_labels[stats.hottest.mine - 1];
-    const canvas = drawCard({
-      title: `I put ${item.name} in ${tier} tier.`,
-      subtitle: `“${t.title}” · community says ${t.tier_labels[stats.hottest.community - 1]}`,
-      lines: ['Fight me.', `(top ${stats.hottest.percentile}% contrarian)`],
-      footer: 'Community Tier Lists',
-    });
-    shareCanvas(canvas, `I put ${item.name} in ${tier} tier. Fight me.`, location.origin + '/t/' + t.id);
+    const labels = t.tier_labels;
+    const tier = labels[stats.hottest.mine - 1];
+    toast('Drawing your take…');
+    try {
+      const canvas = await drawTakePoster({
+        item, category: t.category, title: t.title,
+        mine: tier, crowd: labels[stats.hottest.community - 1],
+        mineIdx: stats.hottest.mine - 1, crowdIdx: stats.hottest.community - 1,
+        percentile: stats.hottest.percentile,
+        link: 'rank yours → ' + shareLink(t.id),
+      });
+      await shareCanvas(canvas, `I put ${item.name} in ${tier} tier. Fight me.`, location.origin + '/t/' + t.id);
+    } catch (err) { toast('Could not render the card'); console.warn(err); }
+  }
+
+  // ---------- Illustration sheet (/illustrations, unlinked) ----------
+  // Every registry drawing + fallback at 32/96/240px, for style review.
+
+  async function renderIllustrations() {
+    const keys = I.keys();
+    screen(`<main class="max-w-xl mx-auto px-4 pb-10 un-safe-top un-safe-bottom">
+      ${topbar('<button data-nav="/">Close</button>', '')}
+      <h1 class="cond text-[26px]">Illustration sheet</h1>
+      <div class="kicker text-[14px] mb-4">${keys.length} drawings: food, flags and city landmarks</div>
+      <div class="grid grid-cols-2 gap-3" data-illo-sheet>
+        ${keys.map((k) => `<div class="card p-2 text-center" style="background:#FAF6EE;color:#1E1B18">
+          ${illoHtml({ id: k, canonical_key: k, name: k }, 240, null, 'width:100%;height:auto;aspect-ratio:1')}
+          <div class="flex items-end justify-center gap-2">${illoHtml({ id: k, canonical_key: k }, 96)}${illoHtml({ id: k, canonical_key: k }, 32)}</div>
+          <div class="serif ital text-[14px]">${esc(k)}</div>
+        </div>`).join('')}
+      </div>
+    </main>`);
   }
 
   // ---------- boot ----------

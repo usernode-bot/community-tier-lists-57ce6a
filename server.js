@@ -95,7 +95,7 @@ async function groupMemberIds(groupId) {
 
 async function activeItems(templateId, userId) {
   const { rows } = await pool.query(
-    `SELECT id::text AS id, name, canonical_key, emoji, image_url, status,
+    `SELECT id::text AS id, name, canonical_key, emoji, image_url, image_source, status,
             added_by_id, added_by_username, created_at
      FROM template_items
      WHERE template_id = $1 AND NOT hidden
@@ -152,12 +152,33 @@ function parseJsonBlock(text, open, close) {
 
 // ---------- Home ----------
 
+// First `limit` active items per template (stable id order) — just enough
+// for the client to draw each list's illustrations.
+async function previewItems(templateIds, limit) {
+  const out = {};
+  if (!templateIds.length) return out;
+  const { rows } = await pool.query(
+    `SELECT t.id::text AS template_id, p.items
+     FROM unnest($1::bigint[]) AS t(id)
+     CROSS JOIN LATERAL (
+       SELECT COALESCE(json_agg(json_build_object('id', i.id::text, 'name', i.name,
+                'canonical_key', i.canonical_key, 'image_url', i.image_url, 'image_source', i.image_source) ORDER BY i.id), '[]'::json) AS items
+       FROM (SELECT id, name, canonical_key, image_url, image_source FROM template_items
+             WHERE template_id = t.id AND status = 'active' AND NOT hidden
+             ORDER BY id LIMIT $2) i
+     ) p`, [templateIds, limit]);
+  for (const r of rows) out[r.template_id] = r.items;
+  return out;
+}
+
 app.get('/api/home', wrap(async (req, res) => {
   const me = req.user;
 
   const todayQ = await pool.query(
-    `SELECT d.edition_no, t.id::text AS template_id, t.title, t.tier_labels,
-            (SELECT COUNT(*)::int FROM rankings r WHERE r.template_id = t.id AND r.status = 'submitted') AS n
+    `SELECT d.edition_no, to_char(d.run_date, 'YYYY-MM-DD') AS run_date,
+            t.id::text AS template_id, t.title, t.category, t.tier_labels,
+            (SELECT COUNT(*)::int FROM rankings r WHERE r.template_id = t.id AND r.status = 'submitted') AS n,
+            (SELECT COUNT(*)::int FROM template_items i WHERE i.template_id = t.id AND i.status = 'active' AND NOT i.hidden) AS item_count
      FROM daily_lists d JOIN templates t ON t.id = d.template_id
      WHERE d.run_date = CURRENT_DATE AND NOT t.hidden`);
   let today = todayQ.rows[0] || null;
@@ -173,7 +194,7 @@ app.get('/api/home', wrap(async (req, res) => {
      WHERE kind IN ('merging','proposed') ORDER BY created_at DESC LIMIT 3`)).rows;
 
   const inProgress = (await pool.query(
-    `SELECT r.template_id::text AS template_id, t.title,
+    `SELECT r.template_id::text AS template_id, t.title, t.category, t.tier_labels, t.author_username,
             (SELECT COUNT(*)::int FROM ranking_items ri WHERE ri.ranking_id = r.id) AS placed,
             (SELECT COUNT(*)::int FROM template_items i WHERE i.template_id = t.id AND i.status = 'active' AND NOT i.hidden) AS total
      FROM rankings r JOIN templates t ON t.id = r.template_id
@@ -190,7 +211,7 @@ app.get('/api/home', wrap(async (req, res) => {
      ORDER BY g.name`, [me.id])).rows;
 
   const feed = (await pool.query(
-    `SELECT t.id::text, t.title, t.category, t.author_username, t.created_at, t.is_seed,
+    `SELECT t.id::text, t.title, t.category, t.tier_labels, t.author_username, t.created_at, t.is_seed,
             (SELECT COUNT(*)::int FROM rankings r WHERE r.template_id = t.id AND r.status = 'submitted') AS n,
             (SELECT COUNT(*)::int FROM rankings r WHERE r.template_id = t.id AND r.status = 'submitted'
               AND r.submitted_at > now() - interval '48 hours') AS recent_n,
@@ -208,11 +229,34 @@ app.get('/api/home', wrap(async (req, res) => {
      WHERE r.status = 'submitted' AND t.visibility = 'public' AND NOT t.hidden AND r.user_id <> $1
      ORDER BY r.submitted_at DESC LIMIT 8`, [me.id])).rows;
 
+  // "Yours" tab: lists you ranked (draft or submitted) or authored, that
+  // you can still see.
+  const mine = (await pool.query(
+    `SELECT t.id::text, t.title, t.category, t.tier_labels, t.author_username,
+            (SELECT COUNT(*)::int FROM rankings r WHERE r.template_id = t.id AND r.status = 'submitted') AS n,
+            rm.status AS my_status
+     FROM templates t
+     LEFT JOIN rankings rm ON rm.template_id = t.id AND rm.user_id = $1
+     WHERE NOT t.hidden AND (t.author_id = $1 OR rm.id IS NOT NULL)
+       AND (t.visibility = 'public'
+            OR EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = t.group_id AND gm.user_id = $1))
+     ORDER BY GREATEST(COALESCE(rm.updated_at, t.created_at), t.created_at) DESC
+     LIMIT 30`, [me.id])).rows;
+
+  // Item previews for the illustrations: 7 for the hero scatter, 3 per card.
+  const previewIds = [...new Set([
+    ...feed.map((t) => t.id), ...inProgress.map((r) => r.template_id), ...mine.map((t) => t.id),
+  ])];
+  const previews = await previewItems(previewIds, 3);
+  if (today) today.preview = (await previewItems([today.template_id], 7))[today.template_id] || [];
+  for (const row of [...feed, ...mine]) row.preview = previews[row.id] || [];
+  for (const row of inProgress) row.preview = previews[row.template_id] || [];
+
   res.json({
     me: { username: me.username, is_moderator: isMod(me) },
     env: process.env.USERNODE_ENV || 'production',
     llm_enabled: LLM_ENABLED,
-    today, changing, in_progress: inProgress, groups, feed, recent_rankings: recentRankings,
+    today, changing, in_progress: inProgress, groups, feed, mine, recent_rankings: recentRankings,
   });
 }));
 

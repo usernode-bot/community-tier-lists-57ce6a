@@ -4,6 +4,8 @@
 // bumped past the max after seeding. Rows are obviously fake
 // ("Staging demo …", staging-demo-user-N) per the platform convention.
 
+const { applyItemImages } = require('./item-images');
+
 const DEMO_USERS = [1, 2, 3, 4, 5].map((n) => ({ id: 900000 + n, username: `staging-demo-user-${n}` }));
 
 // item id -> per-user tiers (index = demo user 1..5; null = explicit skip;
@@ -176,6 +178,9 @@ async function seedStaging(pool) {
       );
     }
   }
+
+  // Marmite is a brand: its real logo, like the production seeds.
+  await applyItemImages(pool, [900004]);
 
   // --- Comments (template-level and item-anchored, so the inline thread
   // on /t/900001/results has a few rows) ---

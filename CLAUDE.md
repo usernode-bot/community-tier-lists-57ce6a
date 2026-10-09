@@ -60,11 +60,21 @@ spec's open questions.
 - **No engagement machinery:** no points for ranking/commenting, no
   view counters, no follower counts, no algorithmic feed (recency +
   raw activity counts only), no DMs, no star ratings.
-- **Seed templates use text/emoji tiles only** — never commit
-  copyrighted imagery. User-uploaded images are user responsibility
-  (report path covers them).
-- Tier ramp colors are fixed by position (S `#E4573D`, A `#E5A83B`,
-  B `#7FB542`, C `#3F97E8`, D `#8A6FDF`); tier letters always
-  accompany color (colorblind-safe).
+- **Every item shows something specific to it, never a stand-in.** Resolution
+  order: uploaded image → **official image** (brands, companies, crypto
+  projects and shows show their real logo / cover art: `image_url` +
+  `image_source`, seeded from `seeds/item-images.js`, rendered as-is, never
+  redrawn) → **item drawing** (`public/illustrations.js`: food, flags, city
+  landmarks, as gouache layer specs composed by one renderer) → **name-only
+  tile** in the item's tint. There are deliberately no category fallbacks (no
+  generic coin / football / film icon / shopping bag). Never draw a brand or
+  logo in the illustration style, never trace a reference, and only seed an
+  official image you've checked is the right logo/cover (a storefront photo is
+  worse than a name tile). Emoji stay in the DB but are not rendered.
+  User-uploaded images are user responsibility (report path covers them).
+- Tier ramp colors are fixed pastels by position (S `#E9A28C`, A `#EDCB80`,
+  B `#BACB96`, C `#AFC6DB`, D `#CDB9DA`, 6th `#C9C6BE`), always with ink
+  (`#1E1B18`) tier letters, never white (colorblind-safe, readable).
+- Share images are paper posters: grid 1080×1350, hot take 1080×1080.
 - Moderators = `MODERATOR_USERNAMES` (comma-separated `dapp.json`
   secret); auto-hide at 3 distinct reporters.

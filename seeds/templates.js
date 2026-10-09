@@ -1,4 +1,5 @@
 const { canonicalKey } = require('../lib/canonical');
+const { applyItemImages } = require('./item-images');
 
 // Launch seed content (real production content, not staging fixture).
 // Inserted idempotently on every boot with fixed ids: template N uses item
@@ -92,6 +93,8 @@ async function seedProduction(pool) {
       );
     }
   }
+  // Brands, crypto projects and shows show their real logo / cover art.
+  await applyItemImages(pool, SEEDS.map((t) => t.id));
 
   // Today's List calendar sets itself at launch: editions 1..10 dated from
   // the first boot, only when the table is empty (editable by SQL later).
