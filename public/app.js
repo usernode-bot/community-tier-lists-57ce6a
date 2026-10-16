@@ -249,6 +249,28 @@
     screen(`${header(title || 'Tier Lists')}<main class="max-w-xl mx-auto p-4"><div class="p-10 text-center" style="color:var(--ink-soft)">Loading…</div></main>`);
   }
 
+  // Results skeleton, for the wait on /results and /comments (big lists can
+  // take a while). Painted in the finished page's own layout, at reduced
+  // strength, so the swap doesn't jump. Always five unlabeled rows: tier
+  // labels and counts aren't known until the template loads. The item counts
+  // are a fixed pattern, not random, so it doesn't flicker between visits.
+  function loadingResults() {
+    const counts = [3, 2, 4, 1, 2];
+    screen(`<main class="max-w-xl mx-auto px-4 pb-10 un-safe-top un-safe-bottom">
+      ${topbar('<button data-nav="/">Close</button>')}
+      <div class="text-center mt-1" role="status">
+        <div class="serif text-[30px]">Loading results…</div>
+        <div class="kicker text-[13px]">tallying everyone's rankings</div>
+      </div>
+      <div class="mt-6 skel" aria-hidden="true">
+        ${counts.map((n, i) => `<div class="tier-row mb-2">
+          <div class="tblock" style="background:${tierColor(i)}"></div>
+          <div class="tier-items">${Array.from({ length: n }, () => '<span class="skel-item"></span>').join('')}</div>
+        </div>`).join('')}
+      </div>
+    </main>`);
+  }
+
   const ROUTES = [
     [/^\/$/, renderHome],
     [/^\/today$/, renderToday],
@@ -823,7 +845,7 @@
   const resultsUi = { view: 'crowd' };
 
   async function renderResults(id, scrollToComments) {
-    loading('…');
+    loadingResults();
     const [data, agg] = await Promise.all([
       api('/api/templates/' + id),
       api('/api/templates/' + id + '/aggregate'),
@@ -2041,12 +2063,22 @@
       <div class="kicker text-[14px] mb-4">${keys.length} drawings: food, flags and city landmarks</div>
       <div class="grid grid-cols-2 gap-3" data-illo-sheet>
         ${keys.map((k) => `<div class="card p-2 text-center" style="background:#FAF6EE;color:#1E1B18">
-          ${illoHtml({ id: k, canonical_key: k, name: k }, 240, null, 'width:100%;height:auto;aspect-ratio:1')}
-          <div class="flex items-end justify-center gap-2">${illoHtml({ id: k, canonical_key: k }, 96)}${illoHtml({ id: k, canonical_key: k }, 32)}</div>
+          ${illoSheetHtml(k, 240, 'width:100%;height:auto;aspect-ratio:1')}
+          <div class="flex items-end justify-center gap-2">${illoSheetHtml(k, 96)}${illoSheetHtml(k, 32)}</div>
           <div class="serif ital text-[14px]">${esc(k)}</div>
         </div>`).join('')}
       </div>
     </main>`);
+  }
+
+  // The review sheet embeds the composed SVG directly instead of going through
+  // the loader's rasterize-once round-trip: same drawing, but the <img> is in
+  // the first paint, so the sheet doesn't depend on ~200 canvas rasterizations
+  // landing inside whatever waits on it. hydrateIllos leaves these alone.
+  function illoSheetHtml(key, size, extraStyle = '') {
+    const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(I.compose(key, { size, theme }));
+    return `<span class="illo" data-illo="${esc(key)}" style="width:${size}px;height:${size}px;${extraStyle}"><img src="${url}" alt=""></span>`;
   }
 
   // ---------- boot ----------

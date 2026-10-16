@@ -6,7 +6,13 @@
 
 const { applyItemImages } = require('./item-images');
 
-const DEMO_USERS = [1, 2, 3, 4, 5].map((n) => ({ id: 900000 + n, username: `staging-demo-user-${n}` }));
+// Demo user ids start at 950001, not 900001: the app has no users table, and
+// the platform signs previews and checks in as a fixed viewer identity with
+// user id 900001. That viewer must arrive unranked — the rank hint, the
+// head-to-head gate and the peeking results state all pin it — so no demo
+// user may own id 900001. With the old 900000+n ids the viewer inherited
+// staging-demo-user-1's submitted rankings and those screens never rendered.
+const DEMO_USERS = [1, 2, 3, 4, 5].map((n) => ({ id: 950000 + n, username: `staging-demo-user-${n}` }));
 
 // item id -> per-user tiers (index = demo user 1..5; null = explicit skip;
 // undefined = user never saw the item). Spread chosen so median, entropy,
