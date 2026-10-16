@@ -1231,7 +1231,7 @@
   const api = {
     PAL, TINTS,
     keys: () => Object.keys(ILLOS),
-    compose, keyFor, normKey, load, cached, tintFor, rotFor, hashStr,
+    compose, keyFor, normKey, load, cached, svgUrl, tintFor, rotFor, hashStr,
   };
   root.Illos = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

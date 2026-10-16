@@ -81,7 +81,8 @@ CREATE TABLE templates (
   item_policy TEXT NOT NULL DEFAULT 'open' CHECK (item_policy IN ('open','approved','closed')),
   is_seed BOOLEAN NOT NULL DEFAULT false,
   hidden BOOLEAN NOT NULL DEFAULT false,               -- moderation auto-hide
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  closes_at TIMESTAMPTZ                -- NULL = no time limit; otherwise set once at creation and never updated. After it passes, new rankings, ranking edits and item adds are rejected (results, comparisons and comments stay open).
 );
 
 CREATE TABLE template_items (
