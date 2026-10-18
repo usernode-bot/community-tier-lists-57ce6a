@@ -311,12 +311,34 @@
   const homeUi = { tab: 'trending' };
 
   // Today's List closes at the next UTC midnight after its run date.
-  function closesIn(runDate) {
+  function todayClosesIn(runDate) {
     if (!runDate) return '';
     const ms = Date.parse(runDate + 'T00:00:00Z') + 864e5 - Date.now();
     if (ms <= 0) return 'closing now';
     const hrs = Math.floor(ms / 36e5);
     return hrs >= 1 ? `closes in ${hrs}h` : `closes in ${Math.max(1, Math.ceil(ms / 6e4))}m`;
+  }
+
+  // A template's time limit: "in N days / hours / min" from the closes_at
+  // instant. Display only — the server's closed flag decides the state.
+  function closesIn(iso) {
+    if (!iso) return '';
+    const ms = new Date(iso) - Date.now();
+    if (ms <= 0) return '';
+    if (ms >= 2 * 864e5) return `in ${Math.floor(ms / 864e5)} days`;
+    if (ms >= 1 * 864e5) return 'in 1 day';
+    if (ms >= 1 * 36e5) return ms >= 2 * 36e5 ? `in ${Math.floor(ms / 36e5)} hours` : 'in 1 hour';
+    return `in ${Math.max(1, Math.floor(ms / 6e4))} min`;
+  }
+
+  function shortDate(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  function longDate(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   const ctaFor = (myStatus) => myStatus === 'submitted' ? 'See the results' : myStatus === 'draft' ? 'Resume' : 'Rank now';
@@ -359,7 +381,7 @@
         <h2 class="cond ht">${esc(today.title)}</h2>
         <div class="ed kicker">Today's list / No. ${today.edition_no}</div>
         <div class="scatter">${figs}</div>
-        <div class="meta kicker">${today.item_count} items · ${closesIn(today.run_date)} · ${today.n} ranked so far${today.my_status === 'submitted' ? ' · yours is in' : ''}</div>
+        <div class="meta kicker">${today.item_count} items · ${todayClosesIn(today.run_date)} · ${today.n} ranked so far${today.my_status === 'submitted' ? ' · yours is in' : ''}</div>
         <button data-nav="${dest}" class="circle" style="${cta.length > 8 ? 'font-size:16px' : ''}">${cta}</button>
       </section>`;
     }
@@ -566,9 +588,10 @@
     const placedCount = items.length - trayItems.length - skipped.length;
     const canSubmit = placedCount >= 1;
     const submitted = data.my.status === 'submitted';
+    const closed = !!t.closed;
     const pct = items.length ? Math.round((placedCount + skipped.length) / items.length * 100) : 0;
 
-    const hint = selItem ? `<div class="hintbar mt-2" id="placer" role="status">
+    const hint = selItem && !closed ? `<div class="hintbar mt-2" id="placer" role="status">
       <span>${esc(selItem.name)} picked. Tap a tier, or drag it there.</span>
       <button data-place="skip" class="linkish">skip (haven't seen it)</button>
       ${(sel in placements) ? '<button data-place="tray" class="linkish">back to the tray</button>' : ''}
@@ -582,9 +605,11 @@
       <div class="text-center">
         <h1 class="cond text-[26px] leading-tight">${esc(t.title)}</h1>
         <div class="rk-pairs"><span><span class="k">List /</span> ${data.daily ? `Today's No. ${data.daily.edition_no}${data.daily.is_final ? ' · final' : ''}` : 'Feed'}</span>
-          <span><span class="k">Placed /</span> ${placedCount} of ${items.length}</span></div>
+          <span><span class="k">Placed /</span> ${placedCount} of ${items.length}</span>
+          ${t.closes_at && !closed ? `<span><span class="k">Closes /</span> ${closesIn(t.closes_at)}</span>` : ''}
+          ${closed ? `<span><span class="k">Closed /</span> ${shortDate(t.closes_at)}</span>` : ''}</div>
         <div class="progline mx-auto mt-2" style="width:180px"><i style="width:${pct}%"></i></div>
-        <div class="kicker text-[13px] mt-1">${submitted ? "Edits update the crowd's grid live" : "The crowd's grid stays hidden until you rank"}${skipped.length ? ` · ${skipped.length} skipped` : ''}
+        <div class="kicker text-[13px] mt-1">${closed ? 'Closed: rankings are final' : submitted ? "Edits update the crowd's grid live" : "The crowd's grid stays hidden until you rank"}${skipped.length ? ` · ${skipped.length} skipped` : ''}
           <span id="save-note" class="not-italic">${esc(rankState.saveNote)}</span></div>
       </div>
       <div id="board" class="mt-4">${rows}</div>
@@ -606,12 +631,18 @@
         <div class="flex items-baseline gap-2 flex-wrap">
           <span class="serif text-[19px]">Item tray<sup class="cnt">(${trayItems.length})</sup></span>
           <span class="kicker text-[12.5px]">unplaced items are skipped</span>
-          <button id="add-item" class="linkish ml-auto text-[14px]">+ add an item</button>
+          ${closed ? '' : '<button id="add-item" class="linkish ml-auto text-[14px]">+ add an item</button>'}
         </div>
         ${policy ? `<div class="tray-sub kicker text-[12px]">${policy}</div>` : ''}
         <div class="tray-grid tier-items ${trayItems.length ? '' : 'empty'}" data-zone="1" data-tray="1" style="background:transparent">${trayItems.map(tileHtml).join('')
           || '<span class="kicker text-[13.5px] block py-2">Every item is placed or skipped.</span>'}</div>
-        <div class="rk-foot">
+        ${closed ? `<div class="rk-foot">
+          <div class="min-w-0">
+            <div class="serif text-[20px] leading-tight">This list is closed.</div>
+            <div class="text-[12px]" style="color:var(--ink-soft)">Rankings closed on ${longDate(t.closes_at)}.</div>
+          </div>
+          <button class="circle" data-nav="/t/${t.id}/results">See<br>results</button>
+        </div>` : `<div class="rk-foot">
           <div class="min-w-0">
             <div class="serif text-[20px] leading-tight">Done when you are.</div>
             <button data-nav="/t/${t.id}/results" class="linkish text-[14px]">Just peek at the results</button>
@@ -619,7 +650,7 @@
             ${!canSubmit ? '<div class="text-[12px]" style="color:var(--ink-soft)">Rank at least one item to submit.</div>' : ''}
           </div>
           <button id="submit-btn" class="circle" ${canSubmit ? '' : 'disabled'}>${submitted ? 'Save<br>changes' : 'Lock it<br>in'}</button>
-        </div>
+        </div>`}
       </section>
     </main>`);
 
@@ -641,18 +672,22 @@
     const { data } = rankState;
     const t = data.template;
 
-    document.querySelectorAll('.itile[data-item]').forEach(attachChip);
+    // A closed list shows the placements but none of them can be moved: no
+    // tile chips, no placement handlers, no submit.
+    if (!t.closed) {
+      document.querySelectorAll('.itile[data-item]').forEach(attachChip);
 
-    document.querySelectorAll('[data-place]').forEach((btn) => btn.addEventListener('click', () => placeSelected(btn.getAttribute('data-place'))));
-    document.querySelectorAll('[data-place-tier]').forEach((btn) => btn.addEventListener('click', () => {
-      if (rankState.sel) placeSelected(btn.getAttribute('data-place-tier'));
-    }));
-    // Tap-to-place: with an item picked, tapping anywhere on a tier row's
-    // drop area (not on another item) places it there.
-    document.querySelectorAll('[data-zone][data-tier]').forEach((zone) => zone.addEventListener('click', (e) => {
-      if (!rankState.sel || e.target.closest('.itile')) return;
-      placeSelected(zone.dataset.tier);
-    }));
+      document.querySelectorAll('[data-place]').forEach((btn) => btn.addEventListener('click', () => placeSelected(btn.getAttribute('data-place'))));
+      document.querySelectorAll('[data-place-tier]').forEach((btn) => btn.addEventListener('click', () => {
+        if (rankState.sel) placeSelected(btn.getAttribute('data-place-tier'));
+      }));
+      // Tap-to-place: with an item picked, tapping anywhere on a tier row's
+      // drop area (not on another item) places it there.
+      document.querySelectorAll('[data-zone][data-tier]').forEach((zone) => zone.addEventListener('click', (e) => {
+        if (!rankState.sel || e.target.closest('.itile')) return;
+        placeSelected(zone.dataset.tier);
+      }));
+    }
 
     const grab = document.getElementById('tray-grab');
     if (grab) grab.addEventListener('click', () => { rankState.trayCollapsed = !rankState.trayCollapsed; drawRank(); });
@@ -672,6 +707,7 @@
       } catch (err) {
         toast(err.message);
         submit.disabled = false;
+        if (err.code === 'list_closed') renderRank(t.id); // reload into the closed view
       }
     });
 
@@ -787,7 +823,12 @@
         const note = document.getElementById('save-note');
         if (note) note.textContent = '· Saved ✓';
       } catch (err) {
-        toast('Autosave failed: ' + err.message);
+        if (err.code === 'list_closed') {
+          toast(err.message);
+          renderRank(rankState.id); // reload into the closed view
+        } else {
+          toast('Autosave failed: ' + err.message);
+        }
       }
     }, 700);
   }
@@ -806,7 +847,10 @@
       await renderRank(t.id);
       rankState.placements = { ...cur };
       drawRank();
-    } catch (err) { toast(err.message); }
+    } catch (err) {
+      toast(err.message);
+      if (err.code === 'list_closed') renderRank(t.id); // reload into the closed view
+    }
   }
 
   async function reportFlow(type, id) {
@@ -842,7 +886,7 @@
     const stats = mineSubmitted && agg.my ? agg.my.stats : null;
     const myP = agg.my && agg.my.placements ? agg.my.placements : null;
     if (!myP && resultsUi.view !== 'crowd') resultsUi.view = 'crowd';
-    const verdictWord = data.daily && data.daily.is_final ? 'final verdict' : 'live verdict';
+    const verdictWord = t.closed || (data.daily && data.daily.is_final) ? 'final verdict' : 'live verdict';
 
     let revealHtml = '';
     if (stats) {
@@ -891,8 +935,10 @@
       revealHtml = `<div class="text-center mt-1"><div class="kicker text-[15px]">${esc(t.title)} · ${verdictWord}</div>
           <h1 class="cond text-[26px] leading-tight">${esc(t.title)}</h1></div>
         <div class="card p-4 mt-3 flex items-center gap-3 text-[14px]" style="background:var(--peek-bg)">
-          <span class="flex-1"><b>You're peeking.</b> The crowd's grid is below. Your own verdict (alignment %, hottest take) unlocks when you rank.</span>
-          <button data-nav="/t/${id}" class="circle md" style="font-size:14px">Rank it yourself</button>
+          ${t.closed
+            ? '<span class="flex-1"><b>This list is closed.</b> The crowd\'s grid below is final.</span>'
+            : `<span class="flex-1"><b>You're peeking.</b> The crowd's grid is below. Your own verdict (alignment %, hottest take) unlocks when you rank.</span>
+          <button data-nav="/t/${id}" class="circle md" style="font-size:14px">Rank it yourself</button>`}
         </div>`;
     }
 
@@ -951,7 +997,7 @@
         <button id="share-take" class="pill accent flex-1" ${hasHotTake ? '' : 'disabled'}>Share my take</button>
       </div>
       ${hasHotTake ? '' : `<div class="kicker text-[13px] mt-1 text-center">${stats ? 'No hot takes to share. You agree with the crowd.' : 'Nobody else has ranked this yet, so there is no take to compare.'}</div>`}` : ''}
-      <div class="text-center mt-1"><button data-nav="/t/${id}" class="linkish text-[16px]">${mineSubmitted ? 'Edit my ranking' : 'Rank this list'}</button></div>
+      ${!(t.closed && !mineSubmitted) ? `<div class="text-center mt-1"><button data-nav="/t/${id}" class="linkish text-[16px]">${t.closed ? 'See my ranking' : mineSubmitted ? 'Edit my ranking' : 'Rank this list'}</button></div>` : ''}
       <section id="comments-section" class="mt-4">
         <h2 class="sec-h">Comments<sup class="cnt">(<span id="c-count">${agg.total_comments}</span>)</sup></h2>
         <div class="card p-3 mb-2">
@@ -1244,7 +1290,15 @@
 
   // ---------- Create (AI-assisted) ----------
 
-  const newState = { items: [], labels: ['S', 'A', 'B', 'C', 'D'], meter: null };
+  const newState = { items: [], labels: ['S', 'A', 'B', 'C', 'D'], meter: null, timeLimit: 'none' };
+
+  // Time-limit presets for the create form: value, button label, hint text.
+  const TIME_LIMIT_OPTIONS = [
+    ['none', 'No limit', ''],
+    ['1d', '1 day', 'Rankings close 1 day after you publish.'],
+    ['1w', '1 week', 'Rankings close 1 week after you publish.'],
+    ['1m', '1 month', 'Rankings close 1 month after you publish.'],
+  ];
 
   async function renderNew() {
     const h = await getHome().catch(() => null);
@@ -1252,6 +1306,7 @@
     newState.items = [];
     newState.labels = ['S', 'A', 'B', 'C', 'D'];
     newState.meter = null;
+    newState.timeLimit = 'none';
 
     screen(`${header('New template', { back: '/' })}
     <main class="max-w-xl mx-auto p-4 pb-10 un-safe-bottom">
@@ -1289,6 +1344,12 @@
           <option value="">Public feed</option>
           ${(h ? h.groups : []).map((g) => `<option value="${g.id}" ${groupPre === g.id ? 'selected' : ''}>Group: ${esc(g.name)}</option>`).join('')}
         </select>
+        <div class="text-[12px] font-bold mt-3 mb-1" style="color:var(--ink-soft)">TIME LIMIT</div>
+        <div class="seg" role="radiogroup" aria-label="Time limit">
+          ${TIME_LIMIT_OPTIONS.map(([v, label]) =>
+            `<button type="button" class="seg-btn un-pressable" data-time-limit="${v}" role="radio" aria-checked="${newState.timeLimit === v ? 'true' : 'false'}">${label}</button>`).join('')}
+        </div>
+        <div id="n-limit-hint" class="text-[12px] mt-2" style="color:var(--ink-soft)"></div>
       </div>
 
       <button id="n-publish" class="btn-primary mt-4">PUBLISH</button>
@@ -1301,6 +1362,17 @@
     document.getElementById('n-add').addEventListener('keydown', (e) => { if (e.key === 'Enter') addManual(); });
     document.getElementById('n-ai').addEventListener('click', aiPropose);
     document.getElementById('n-publish').addEventListener('click', publish);
+
+    // Repaint the segmented control in place (no form redraw — the typed
+    // title and items survive).
+    document.querySelectorAll('[data-time-limit]').forEach((b) => b.addEventListener('click', () => {
+      newState.timeLimit = b.getAttribute('data-time-limit');
+      document.querySelectorAll('[data-time-limit]').forEach((x) =>
+        x.setAttribute('aria-checked', String(x === b)));
+      const hint = document.getElementById('n-limit-hint');
+      const opt = TIME_LIMIT_OPTIONS.find(([v]) => v === newState.timeLimit);
+      if (hint) hint.textContent = opt ? opt[2] : '';
+    }));
 
     function addManual() {
       const inp = document.getElementById('n-add');
@@ -1352,6 +1424,7 @@
             item_policy: document.getElementById('n-policy').value,
             visibility: vis ? 'group' : 'public',
             group_id: vis || null,
+            time_limit: newState.timeLimit,
           },
         });
         homeCache = null;
@@ -2033,16 +2106,27 @@
   // ---------- Illustration sheet (/illustrations, unlinked) ----------
   // Every registry drawing + fallback at 32/96/240px, for style review.
 
-  async function renderIllustrations() {
+  function renderIllustrations() {
     const keys = I.keys();
+    // Paint straight from the sync SVG data URLs: the bitmap rasterizer can
+    // take tens of seconds cold for 66 drawings, and this page is for review
+    // — the composed SVG IS the drawing (the raster is just a cached copy).
+    const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    const cell = (k, size, extraStyle = '') => {
+      let url = null;
+      try { url = I.svgUrl(k, size, theme); } catch { /* a broken spec shows its name tile */ }
+      return url
+        ? `<span class="illo" data-illo="${esc(k)}" data-isz="${size}" style="width:${size}px;height:${size}px;${extraStyle}"><img src="${esc(url)}" alt=""></span>`
+        : nameTileHtml({ id: k, name: k }, size, size);
+    };
     screen(`<main class="max-w-xl mx-auto px-4 pb-10 un-safe-top un-safe-bottom">
       ${topbar('<button data-nav="/">Close</button>', '')}
       <h1 class="cond text-[26px]">Illustration sheet</h1>
       <div class="kicker text-[14px] mb-4">${keys.length} drawings: food, flags and city landmarks</div>
       <div class="grid grid-cols-2 gap-3" data-illo-sheet>
         ${keys.map((k) => `<div class="card p-2 text-center" style="background:#FAF6EE;color:#1E1B18">
-          ${illoHtml({ id: k, canonical_key: k, name: k }, 240, null, 'width:100%;height:auto;aspect-ratio:1')}
-          <div class="flex items-end justify-center gap-2">${illoHtml({ id: k, canonical_key: k }, 96)}${illoHtml({ id: k, canonical_key: k }, 32)}</div>
+          ${cell(k, 240, 'width:100%;height:auto;aspect-ratio:1')}
+          <div class="flex items-end justify-center gap-2">${cell(k, 96)}${cell(k, 32)}</div>
           <div class="serif ital text-[14px]">${esc(k)}</div>
         </div>`).join('')}
       </div>

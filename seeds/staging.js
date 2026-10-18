@@ -3,10 +3,14 @@
 // production seeds (<13000) or the sequence floor (1000); sequences are
 // bumped past the max after seeding. Rows are obviously fake
 // ("Staging demo …", staging-demo-user-N) per the platform convention.
+// Demo PEOPLE sit at 910001+: 900000+ is the platform's check-fixture
+// identity range, and a fixture account colliding with demo user 1 made the
+// check viewer inherit that seed ranking (its partial-submit and
+// head-to-head gates could never render).
 
 const { applyItemImages } = require('./item-images');
 
-const DEMO_USERS = [1, 2, 3, 4, 5].map((n) => ({ id: 900000 + n, username: `staging-demo-user-${n}` }));
+const DEMO_USERS = [1, 2, 3, 4, 5].map((n) => ({ id: 910000 + n, username: `staging-demo-user-${n}` }));
 
 // item id -> per-user tiers (index = demo user 1..5; null = explicit skip;
 // undefined = user never saw the item). Spread chosen so median, entropy,
@@ -181,6 +185,51 @@ async function seedStaging(pool) {
 
   // Marmite is a brand: its real logo, like the production seeds.
   await applyItemImages(pool, [900004]);
+
+  // --- Demo template 5: time-limited, still open ("Closes / in N days") ---
+  await pool.query(
+    `INSERT INTO templates (id, title, category, author_id, author_username, visibility, item_policy, closes_at)
+     VALUES (900005, 'Staging demo: weekend movies', 'Film', $1, $2, 'public', 'open', now() + interval '6 days')
+     ON CONFLICT (id) DO NOTHING`,
+    [u[0].id, u[0].username]
+  );
+  const movies = ['Padayappa', 'Anniyan', 'Baasha', 'Kannathil Muthamittal'];
+  for (let i = 0; i < movies.length; i++) {
+    await pool.query(
+      `INSERT INTO template_items (id, template_id, name, canonical_key)
+       VALUES ($1, 900005, $2, $3) ON CONFLICT (id) DO NOTHING`,
+      [900501 + i, movies[i], movies[i].toLowerCase().replace(/[^a-z0-9]+/g, '-')]
+    );
+  }
+
+  // --- Demo template 6: time limit passed ("Closed / …", inert tiles) ---
+  await pool.query(
+    `INSERT INTO templates (id, title, category, author_id, author_username, visibility, item_policy, closes_at)
+     VALUES (900006, 'Staging demo: closed snack vote', 'Food', $1, $2, 'public', 'open', now() - interval '2 hours')
+     ON CONFLICT (id) DO NOTHING`,
+    [u[1].id, u[1].username]
+  );
+  const snacks = ['Chips', 'Popcorn'];
+  for (let i = 0; i < snacks.length; i++) {
+    await pool.query(
+      `INSERT INTO template_items (id, template_id, name, canonical_key)
+       VALUES ($1, 900006, $2, $3) ON CONFLICT (id) DO NOTHING`,
+      [900601 + i, snacks[i], snacks[i].toLowerCase().replace(/[^a-z0-9]+/g, '-')]
+    );
+  }
+  await pool.query(
+    `INSERT INTO rankings (id, template_id, user_id, username, status, submitted_at)
+     VALUES (900011, 900006, $1, $2, 'submitted', now() - interval '3 hours')
+     ON CONFLICT (id) DO NOTHING`,
+    [u[0].id, u[0].username]
+  );
+  for (let i = 0; i < snacks.length; i++) {
+    await pool.query(
+      `INSERT INTO ranking_items (ranking_id, item_id, tier) VALUES (900011, $1, $2)
+       ON CONFLICT DO NOTHING`,
+      [900601 + i, i + 1]
+    );
+  }
 
   // --- Comments (template-level and item-anchored, so the inline thread
   // on /t/900001/results has a few rows) ---
