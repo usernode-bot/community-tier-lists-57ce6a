@@ -36,6 +36,10 @@
     { "name": "Illustration sheet renders", "path": "/illustrations", "expectSelector": "[data-illo-sheet] [data-illo] img" },
     { "name": "Crypto items show their official logo", "path": "/t/3", "expectSelector": ".illo.official img[src*='coingecko']" },
     { "name": "Countries show their flag", "path": "/t/5", "expectSelector": "[data-illo='brazil'] img" },
-    { "name": "Items without art show a name tile", "path": "/t/9", "expectSelector": ".illo.nametile" }
+    { "name": "Items without art show a name tile", "path": "/t/9", "expectSelector": ".illo.nametile" },
+    { "name": "Create form has a time limit", "path": "/new", "expectSelector": "[data-time-limit='1w']" },
+    { "name": "Time-limited list shows its countdown", "path": "/t/900005", "expectText": "Closes /" },
+    { "name": "Closed list shows the closed view", "path": "/t/900006", "expectText": "Rankings closed on" },
+    { "name": "Closed results show final verdict", "path": "/t/900006/results", "expectText": "final verdict" }
   ]
 }

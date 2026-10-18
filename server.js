@@ -7,6 +7,7 @@ const { pool, migrate, bumpSequences } = require('./lib/db');
 const { canonicalKey } = require('./lib/canonical');
 const { getAggregate, invalidate, revealStats, myPlacements } = require('./lib/aggregate');
 const { pairScore } = require('./lib/score');
+const { closeInterval, isClosed, closedMessage } = require('./lib/deadline');
 const { seedProduction } = require('./seeds/templates');
 const { seedStaging } = require('./seeds/staging');
 
@@ -299,6 +300,8 @@ app.get('/api/templates/:id', wrap(async (req, res) => {
       author_username: t.author_username, is_author: t.author_id === req.user.id,
       visibility: t.visibility, group_id: t.group_id ? String(t.group_id) : null,
       tier_labels: t.tier_labels, item_policy: t.item_policy, hidden: t.hidden,
+      closes_at: t.closes_at ? new Date(t.closes_at).toISOString() : null,
+      closed: isClosed(t.closes_at),
     },
     items,
     my: { status: mine ? mine.status : null, placements },
@@ -324,6 +327,8 @@ app.post('/api/templates', wrap(async (req, res) => {
     groupId = parseInt(b.group_id, 10);
     if (!groupId || !(await isMember(groupId, req.user.id))) throw httpErr(403, 'Not a member of that group');
   }
+  // 'none'/absent → NULL (no limit); a preset → now() + interval.
+  const interval = closeInterval(b.time_limit);
   const rawItems = Array.isArray(b.items) ? b.items : [];
   const seen = new Set();
   const items = [];
@@ -339,10 +344,10 @@ app.post('/api/templates', wrap(async (req, res) => {
   if (items.length < 2) throw httpErr(400, 'A template needs at least 2 items');
 
   const ins = await pool.query(
-    `INSERT INTO templates (title, category, author_id, author_username, visibility, group_id, tier_labels, item_policy)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    `INSERT INTO templates (title, category, author_id, author_username, visibility, group_id, tier_labels, item_policy, closes_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + $9::interval) RETURNING id`,
     [title, b.category ? String(b.category).slice(0, 40) : null, req.user.id, req.user.username,
-     visibility, groupId, labels, policy]);
+     visibility, groupId, labels, policy, interval]);
   const tid = ins.rows[0].id;
   for (const it of items) {
     await pool.query(
@@ -359,6 +364,7 @@ app.post('/api/templates/:id/items', wrap(async (req, res) => {
   const t = await loadTemplate(req.params.id);
   await assertCanSee(t, req.user);
   if (t.hidden) throw httpErr(403, 'This list is hidden pending review');
+  if (isClosed(t.closes_at)) throw httpErr(403, closedMessage(t.closes_at), 'list_closed');
   const name = String((req.body || {}).name || '').trim();
   if (!name || name.length > 60) throw httpErr(400, 'Item name must be 1–60 characters');
   let imageUrl = String((req.body || {}).image_url || '').trim() || null;
@@ -431,6 +437,9 @@ app.put('/api/templates/:id/ranking', wrap(async (req, res) => {
   const t = await loadTemplate(req.params.id);
   await assertCanSee(t, req.user);
   if (t.hidden) throw httpErr(403, 'This list is hidden pending review');
+  // Draft autosaves, first submits and edits to a submitted ranking all stop
+  // here once the list's time limit has passed. Nothing is written.
+  if (isClosed(t.closes_at)) throw httpErr(403, closedMessage(t.closes_at), 'list_closed');
   const k = t.tier_labels.length;
   const submit = req.query.submit === '1' || !!(req.body || {}).submit;
 
