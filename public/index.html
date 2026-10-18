@@ -413,8 +413,15 @@
     .gitem { display: inline-flex; flex-direction: column; align-items: center; min-width: 56px; min-height: 56px; padding: 2px; border-radius: 12px; position: relative; }
     .gitem .illo { width: 42px; height: 42px; }
     .gitem .flag { position: absolute; top: -4px; right: -2px; font-size: 9px; padding: 0 5px; border-radius: 99px; font-weight: 600; }
+    /* Results skeleton, shown while a results page fetches */
+    .skel .tblock { opacity: .4; }
+    .skel .tier-items { opacity: .7; }
+    .skel-item { width: 42px; height: 42px; border-radius: 12px; background: var(--paper-deep); }
+    @keyframes skelPulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+    .skel { animation: skelPulse 1.4s ease-in-out infinite; }
     @media (prefers-reduced-motion: reduce) {
       .reveal { animation: none; }
+      .skel { animation: none; }
       .stk, .stk-strip, .stk-body, .card-tap, .circle, .tray-grid { transition: none !important; }
     }
   </style>
