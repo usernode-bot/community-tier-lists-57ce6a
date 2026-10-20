@@ -664,6 +664,12 @@
             <div class="text-[12px]" style="color:var(--ink-soft)">Rankings closed on ${longDate(t.closes_at)}.</div>
           </div>
           <button class="circle" data-nav="/t/${t.id}/results">See<br>results</button>
+        </div>` : trayItems.length ? `<div class="rk-foot">
+          <div class="min-w-0">
+            <div class="text-[12px]" style="color:var(--ink-soft)">${canSubmit ? `${trayItems.length} still in the tray.` : 'Rank at least one item to submit.'}</div>
+            <button data-nav="/t/${t.id}/results" class="linkish text-[14px]">Just peek at the results</button>
+          </div>
+          <button id="submit-btn" class="circle md" ${canSubmit ? '' : 'disabled'}>${submitted ? 'Save<br>changes' : 'Lock it<br>in'}</button>
         </div>` : `<div class="rk-foot">
           <div class="min-w-0">
             <div class="serif text-[20px] leading-tight">Done when you are.</div>

@@ -31,7 +31,7 @@
     { "id": "home-illustrated", "name": "Illustrated home", "path": "/", "expectText": "Today's list", "visual": true, "impact": ["public/**"] },
     { "name": "Rank board draws item illustrations", "path": "/t/900001", "expectSelector": "[data-illo] img" },
     { "name": "Rank tray is a bottom sheet", "path": "/t/900001", "expectSelector": "[data-tray-sheet]" },
-    { "name": "Rank footer locks it in", "path": "/t/900001", "expectText": "Done when you are." },
+    { "name": "Rank footer locks it in", "path": "/t/900001", "expectSelector": "#submit-btn" },
     { "name": "Results grid tabs", "path": "/t/900001/results", "expectText": "Crowd" },
     { "name": "Illustration sheet renders", "path": "/illustrations", "expectSelector": "[data-illo-sheet] [data-illo] img" },
     { "name": "Crypto items show their official logo", "path": "/t/3", "expectSelector": ".illo.official img[src*='coingecko']" },
