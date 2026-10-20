@@ -614,7 +614,7 @@
     const pct = items.length ? Math.round((placedCount + skipped.length) / items.length * 100) : 0;
 
     const hint = selItem && !closed ? `<div class="hintbar mt-2" id="placer" role="status">
-      <span>${esc(selItem.name)} picked. Tap a tier, or drag it there.</span>
+      <span>${esc(selItem.name)} picked. Tap a tier, or hold it and drag it there.</span>
       <button data-place="skip" class="linkish">skip (haven't seen it)</button>
       ${(sel in placements) ? '<button data-place="tray" class="linkish">back to the tray</button>' : ''}
     </div>` : '';
@@ -749,6 +749,10 @@
     }));
   }
 
+  // Touch drags start only after a hold, so a swipe on an item scrolls the
+  // board instead of dragging it. Mouse/pen drags stay immediate.
+  const LONG_PRESS_MS = 400, LONG_PRESS_SLOP = 10;
+
   function attachChip(chip) {
     chip.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -762,22 +766,42 @@
     chip.addEventListener('pointerdown', (e) => {
       if (e.button && e.button !== 0) return;
       const id = chip.dataset.item;
+      const isTouch = e.pointerType === 'touch';
       const sx = e.clientX, sy = e.clientY;
       let started = false, ghost = null, lastTarget = null;
+      let lastX = sx, lastY = sy, holdTimer = 0;
+
+      // The shared "start the drag" step: claim the gesture, clone the chip
+      // into the ghost and mark the original dimmed. Touch calls this from
+      // the hold timer; mouse/pen calls it on the first move past 7px.
+      const lift = (x, y) => {
+        if (window.unNative && unNative.gestures) {
+          const seq = isTouch ? 'touch' : e.pointerId;
+          if (unNative.gestures.claim(seq, 'tier-drag') === false) { cleanup(); return; }
+        }
+        clearTimeout(holdTimer); holdTimer = 0;
+        started = true;
+        ghost = chip.cloneNode(true);
+        ghost.classList.add('itile-ghost');
+        ghost.classList.remove('selected');
+        document.body.appendChild(ghost);
+        chip.classList.add('dragging');
+        ghost.style.left = x + 'px';
+        ghost.style.top = y + 'px';
+      };
 
       const onMove = (ev) => {
         if (!started) {
-          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 7) return;
-          if (window.unNative && unNative.gestures) {
-            const seq = ev.pointerType === 'touch' ? 'touch' : ev.pointerId;
-            if (unNative.gestures.claim(seq, 'tier-drag') === false) { cleanup(); return; }
+          if (isTouch) {
+            // Before the hold completes, any real movement is a scroll:
+            // release the touch untouched so the browser can pan.
+            lastX = ev.clientX; lastY = ev.clientY;
+            if (Math.hypot(lastX - sx, lastY - sy) > LONG_PRESS_SLOP) cleanup();
+            return;
           }
-          started = true;
-          ghost = chip.cloneNode(true);
-          ghost.classList.add('itile-ghost');
-          ghost.classList.remove('selected');
-          document.body.appendChild(ghost);
-          chip.classList.add('dragging');
+          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 7) return;
+          lift(ev.clientX, ev.clientY);
+          if (!started) return;
         }
         ghost.style.left = ev.clientX + 'px';
         ghost.style.top = ev.clientY + 'px';
@@ -807,18 +831,36 @@
       };
 
       const cleanup = () => {
+        clearTimeout(holdTimer); holdTimer = 0;
         chip.removeEventListener('pointermove', onMove);
         chip.removeEventListener('pointerup', onUp);
         chip.removeEventListener('pointercancel', cleanup);
+        chip.removeEventListener('touchmove', blockScroll);
+        chip.removeEventListener('contextmenu', blockMenu);
         if (ghost) ghost.remove();
         chip.classList.remove('dragging');
         if (lastTarget) lastTarget.classList.remove('drop-target');
       };
 
+      // Once the item has lifted, the finger must not start a page scroll,
+      // so the touchmove is cancelled; and the long-press must not open the
+      // system context menu. Both apply only while this touch is down.
+      const blockScroll = (ev) => { if (started) ev.preventDefault(); };
+      const blockMenu = (ev) => { ev.preventDefault(); };
+
       try { chip.setPointerCapture(e.pointerId); } catch {}
       chip.addEventListener('pointermove', onMove);
       chip.addEventListener('pointerup', onUp);
       chip.addEventListener('pointercancel', cleanup);
+      if (isTouch) {
+        holdTimer = setTimeout(() => {
+          holdTimer = 0;
+          // A redraw during the hold replaces the node: drop the gesture.
+          if (chip.isConnected) lift(lastX, lastY);
+        }, LONG_PRESS_MS);
+        chip.addEventListener('touchmove', blockScroll, { passive: false });
+        chip.addEventListener('contextmenu', blockMenu);
+      }
     });
   }
 
